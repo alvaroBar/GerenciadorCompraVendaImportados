@@ -1,0 +1,19 @@
+music-accessories-manager/
+├─ backend/
+│  ├─ requirements.txt
+│  ├─ app.py
+│  ├─ models.db (criado ao rodar)
+├─ frontend/
+│  ├─ package.json
+│  ├─ public/
+│  │  └─ index.html
+│  ├─ src/
+│  │  ├─ index.js
+│  │  ├─ App.js
+│  │  ├─ api.js
+│  │  ├─ styles.css
+│  │  ├─ components/
+│  │  │  ├─ ProductForm.js
+│  │  │  ├─ ProductList.js
+│  │  │  └─ Simulation.js
+└─ README.md
