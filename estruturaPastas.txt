@@ -1,0 +1,20 @@
+GerenciadorCompraVendaImportados/
+│
+├── backend/
+│   ├── app.py
+│   ├── models.py
+│   ├── database.py
+│   └── requirements.txt
+│
+└── frontend/
+    ├── public/
+    │   └── index.html
+    ├── src/
+    │   ├── components/
+    │   │   ├── ProductForm.js
+    │   │   └── ProductList.js
+    │   ├── App.js
+    │   ├── api.js
+    │   ├── index.js
+    │   └── styles.css
+    └── package.json

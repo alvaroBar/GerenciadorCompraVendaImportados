@@ -1,0 +1,198 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+  background: #fafafa;
+  color: #333;
+}
+
+h1, h2 {
+  color: #333;
+}
+
+form {
+  background: #f0f0f0;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+input {
+  margin: 5px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+button {
+  padding: 9px 15px;
+  cursor: pointer;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+button:hover {
+  background: #0056b3;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+/* Novo container para organizar label + input */
+.input-group {
+  display: inline-block; /* Permite que fiquem lado a lado */
+  vertical-align: top;  /* Alinha os grupos pela parte de cima */
+  margin: 5px;
+}
+
+.input-group label {
+  display: block; /* Label fica em cima do input */
+  font-weight: bold;
+  font-size: 0.9em;
+  margin-bottom: 3px;
+  color: #555;
+  text-align: left;
+}
+
+/* Ajuste para o seletor de moeda */
+.input-group select {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  height: 35.6px; /* Alinha com a altura do input */
+  margin-left: 5px; /* Separa do input de preço */
+}
+
+/* --- Estilos do Modal --- */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  position: relative;
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 30px;
+  max-width: 500px;
+  width: 100%;
+  outline: none;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+}
+
+.modal-close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #888;
+}
+
+.modal-actions {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.modal-actions button {
+  margin-left: 10px;
+}
+
+.modal-actions .btn-danger {
+  background-color: #dc3545;
+}
+.modal-actions .btn-danger:hover {
+  background-color: #c82333;
+}
+
+/* --- Estilos da Tabela --- */
+.action-buttons button {
+  font-size: 0.8em;
+  padding: 4px 8px;
+  margin-right: 5px;
+}
+
+/* --- Estilos da Linha Expansível --- */
+
+.product-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.product-row:hover {
+  background-color: #f9f9f9;
+}
+
+.breakdown-row td {
+  padding: 0 !important;
+  border: 0;
+  /* Reseta a borda para a célula interna controlar */
+}
+
+.breakdown-content {
+  background: #fafafa;
+  padding: 15px 25px;
+  /* Adiciona uma borda sutil para "conectar" com a linha de cima */
+  border-top: 1px dashed #ddd;
+  border-bottom: 1px solid #ddd; /* Borda forte para fechar o grupo */
+}
+
+.breakdown-content h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.breakdown-content ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.breakdown-content li {
+  margin-bottom: 8px;
+  font-size: 0.95em;
+}
+
+.breakdown-content li strong {
+  color: #111;
+  min-width: 150px;
+  display: inline-block;
+}
+
+.breakdown-content li span {
+  font-size: 0.9em;
+  color: #666;
+  margin-left: 10px;
+}
+
+.breakdown-total {
+  margin-top: 15px;
+  font-weight: bold;
+  font-size: 1.1em;
+}
