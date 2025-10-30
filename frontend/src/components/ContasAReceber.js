@@ -34,9 +34,8 @@ function ContasAReceber({ api, onDataChanged }) {
     setCurrentItem({ ...currentItem, [e.target.name]: e.target.value });
   };
 
-  // Ação de Receber
   const handleReceberConta = async (id) => {
-    if (!window.confirm("Confirmar o recebimento desta parcela? Esta ação adicionará o valor ao seu caixa.")) {
+    if (!window.confirm("Confirmar o recebimento desta conta? Esta ação adicionará o valor ao seu caixa.")) {
       return;
     }
     try {
@@ -48,7 +47,6 @@ function ContasAReceber({ api, onDataChanged }) {
     }
   };
 
-  // Ação de Editar
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -60,7 +58,6 @@ function ContasAReceber({ api, onDataChanged }) {
     }
   };
 
-  // Ação de Excluir
   const handleDelete = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir esta conta pendente?")) {
       return;
@@ -86,7 +83,7 @@ function ContasAReceber({ api, onDataChanged }) {
       <table>
         <thead>
           <tr>
-            <th>Produto Vendido</th>
+            {/* 1. MUDANÇA: 'Produto Vendido' agora é 'Descrição' */}
             <th>Descrição</th>
             <th>Vencimento</th>
             <th>Valor (R$)</th>
@@ -94,10 +91,10 @@ function ContasAReceber({ api, onDataChanged }) {
           </tr>
         </thead>
         <tbody>
-          {contas.length === 0 && ( <tr><td colSpan="5">Nenhuma conta pendente.</td></tr> )}
+          {contas.length === 0 && ( <tr><td colSpan="4">Nenhuma conta pendente.</td></tr> )}
           {contas.map((conta) => (
             <tr key={conta.id}>
-              <td>{conta.nome_produto}</td>
+              {/* 2. MUDANÇA: Exibe 'descricao' vinda da API */}
               <td>{conta.descricao}</td>
               <td>{formatarData(conta.data_vencimento)}</td>
               <td>R$ {conta.valor_parcela_brl.toFixed(2)}</td>
@@ -111,7 +108,7 @@ function ContasAReceber({ api, onDataChanged }) {
         </tbody>
       </table>
 
-      {/* --- Modal de Edição --- */}
+      {/* --- Modal de Edição (sem mudanças, já usa 'descricao') --- */}
       <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="modal-content" overlayClassName="modal-overlay">
         <button className="modal-close-button" onClick={closeModal}>&times;</button>
         {currentItem && (
@@ -120,7 +117,7 @@ function ContasAReceber({ api, onDataChanged }) {
             <form onSubmit={handleEditSubmit}>
               <div className="input-group">
                 <label>Descrição</label>
-                <input name="descricao" value={currentItem.descricao} onChange={handleChange} placeholder="Ex: Parcela 1/2" />
+                <input name="descricao" value={currentItem.descricao} onChange={handleChange} required />
               </div>
               <div className="input-group">
                 <label>Valor da Parcela (R$)</label>

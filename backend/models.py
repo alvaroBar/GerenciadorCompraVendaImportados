@@ -65,26 +65,19 @@ class Venda(db.Model):
 
 
 class Transacao(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    data = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    tipo = db.Column(db.String(50), nullable=False)
-    descricao = db.Column(db.String(200), nullable=False)
-    valor_brl = db.Column(db.Float, nullable=False)
-    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=True)
-    venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True)
-
-    # --- 1. NOVA COLUNA ---
+    # ... (sem mudanças)
+    id = db.Column(db.Integer, primary_key=True);
+    data = db.Column(db.DateTime, nullable=False, default=datetime.utcnow);
+    tipo = db.Column(db.String(50), nullable=False);
+    descricao = db.Column(db.String(200), nullable=False);
+    valor_brl = db.Column(db.Float, nullable=False);
+    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=True);
+    venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True);
     is_manual = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self):
-        return {
-            'id': self.id,
-            'data': self.data.isoformat().split('T')[0],  # Formata como AAAA-MM-DD
-            'tipo': self.tipo,
-            'descricao': self.descricao,
-            'valor_brl': self.valor_brl,
-            'is_manual': self.is_manual
-        }
+        return {'id': self.id, 'data': self.data.isoformat().split('T')[0], 'tipo': self.tipo,
+                'descricao': self.descricao, 'valor_brl': self.valor_brl, 'is_manual': self.is_manual}
 
 
 class ContaAPagar(db.Model):
@@ -103,17 +96,25 @@ class ContaAPagar(db.Model):
 
 
 class ContaAReceber(db.Model):
-    # ... (sem mudanças)
-    id = db.Column(db.Integer, primary_key=True);
-    venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=False);
-    descricao = db.Column(db.String(200), nullable=True);
-    valor_parcela_brl = db.Column(db.Float, nullable=False);
-    data_vencimento = db.Column(db.DateTime, nullable=False);
-    status = db.Column(db.String(50), nullable=False, default='Pendente');
+    id = db.Column(db.Integer, primary_key=True)
+    # 1. MUDANÇA: Venda agora é opcional (pode ser nula)
+    venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True)
+    # 2. MUDANÇA: Descrição agora é obrigatória
+    descricao = db.Column(db.String(200), nullable=False)
+    valor_parcela_brl = db.Column(db.Float, nullable=False)
+    data_vencimento = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='Pendente')
     transacao_id = db.Column(db.Integer, db.ForeignKey('transacao.id'), nullable=True)
 
     def to_dict(self):
-        return {'id': self.id, 'venda_id': self.venda_id, 'nome_produto': self.venda.item_vendido.produto_catalogo.nome,
-                'descricao': self.descricao, 'valor_parcela_brl': self.valor_parcela_brl,
-                'data_vencimento': self.data_vencimento.isoformat().split('T')[0], 'status': self.status,
-                'transacao_id': self.transacao_id}
+        return {
+            'id': self.id,
+            'venda_id': self.venda_id,
+            # Se 'venda' existir, pega o nome, senão mostra 'N/A' (ou a própria descrição)
+            'nome_produto': self.venda.item_vendido.produto_catalogo.nome if self.venda else 'N/A (Avulso)',
+            'descricao': self.descricao,
+            'valor_parcela_brl': self.valor_parcela_brl,
+            'data_vencimento': self.data_vencimento.isoformat().split('T')[0],
+            'status': self.status,
+            'transacao_id': self.transacao_id
+        }

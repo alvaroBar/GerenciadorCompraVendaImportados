@@ -1,62 +1,82 @@
 // frontend/src/components/FinancialForms.js
 import React, { useState } from "react";
 
-// Pega a data de hoje no formato AAAA-MM-DD
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
 function FinancialForms({ api, onDataChanged }) {
 
+  // Form 1: Ajuste de Caixa (Transação Imediata)
   const [manualForm, setManualForm] = useState({
     tipo: 'Receita',
     descricao: '',
     valor_brl: '',
-    data: getTodayDate() // 1. Adicionar data
+    data: getTodayDate()
   });
 
-  const [contaForm, setContaForm] = useState({
+  // Form 2: Conta a Pagar (Custo Futuro)
+  const [contaPagarForm, setContaPagarForm] = useState({
     descricao: '',
     valor_brl: '',
     data_vencimento: ''
   });
 
-  const handleManualChange = (e) => {
-    setManualForm({ ...manualForm, [e.target.name]: e.target.value });
-  };
-  const handleContaChange = (e) => {
-    setContaForm({ ...contaForm, [e.target.name]: e.target.value });
-  };
+  // Form 3: Recebimento Futuro (Receita Futura)
+  const [contaReceberForm, setContaReceberForm] = useState({
+    descricao: '',
+    valor_brl: '',
+    data_vencimento: ''
+  });
 
+  // --- Handlers ---
+  const handleManualChange = (e) => setManualForm({ ...manualForm, [e.target.name]: e.target.value });
+  const handlePagarChange = (e) => setContaPagarForm({ ...contaPagarForm, [e.target.name]: e.target.value });
+  const handleReceberChange = (e) => setContaReceberForm({ ...contaReceberForm, [e.target.name]: e.target.value });
+
+  // --- Submits ---
   const handleManualSubmit = async (e) => {
     e.preventDefault();
     try {
       await api.post('/financeiro/transacao-manual', manualForm);
-      alert('Transação manual registrada!');
+      alert('Ajuste de caixa registrado!');
       setManualForm({ tipo: 'Receita', descricao: '', valor_brl: '', data: getTodayDate() });
       onDataChanged();
     } catch (error) {
-      alert('Erro ao registrar transação.');
+      alert(error.response?.data?.erro || 'Erro ao registrar transação.');
     }
   };
 
-  const handleContaSubmit = async (e) => {
+  const handlePagarSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/contas-a-pagar', contaForm);
+      await api.post('/contas-a-pagar', contaPagarForm);
       alert('Conta a pagar registrada!');
-      setContaForm({ descricao: '', valor_brl: '', data_vencimento: '' });
+      setContaPagarForm({ descricao: '', valor_brl: '', data_vencimento: '' });
       onDataChanged();
     } catch (error) {
       alert('Erro ao registrar conta.');
     }
   };
 
+  const handleReceberSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // 1. Envia para a nova rota
+      await api.post('/contas-a-receber-manual', contaReceberForm);
+      alert('Recebimento futuro registrado!');
+      setContaReceberForm({ descricao: '', valor_brl: '', data_vencimento: '' });
+      onDataChanged();
+    } catch (error) {
+      alert('Erro ao registrar recebimento.');
+    }
+  };
+
   return (
     <div className="financial-forms">
-      {/* --- Formulário 1: Transação Manual --- */}
+      {/* --- Formulário 1: Ajuste de Caixa (Imediato) --- */}
       <div>
-        <h2>Transação Manual (Caixa)</h2>
+        <h2>Ajuste de Caixa (Imediato)</h2>
         <form onSubmit={handleManualSubmit}>
-          <p>Use para registrar seu <strong>Caixa Inicial</strong> (Receita) ou custos avulsos.</p>
+          <p>Use para <strong>Caixa Inicial</strong> ou transações que <strong>já aconteceram</strong>.</p>
           <div className="input-group">
             <label>Tipo</label>
             <select name="tipo" value={manualForm.tipo} onChange={handleManualChange}>
@@ -72,33 +92,53 @@ function FinancialForms({ api, onDataChanged }) {
             <label>Valor (R$)</label>
             <input name="valor_brl" type="number" step="0.01" value={manualForm.valor_brl} onChange={handleManualChange} required />
           </div>
-          {/* 2. Adicionar campo de data */}
           <div className="input-group">
             <label>Data da Transação</label>
             <input name="data" type="date" value={manualForm.data} onChange={handleManualChange} required />
           </div>
-          <button type="submit">Registrar Transação</button>
+          <button type="submit">Ajustar Caixa</button>
         </form>
       </div>
 
-      {/* --- Formulário 2: Contas a Pagar --- */}
+      {/* --- Formulário 2: Registrar Conta a Pagar --- */}
       <div>
-        <h2>Registrar Conta a Pagar</h2>
-        <form onSubmit={handleContaSubmit}>
-          <p>Registre custos futuros (ex: Aluguel, Luz, Gasolina).</p>
+        <h2>Registrar Custo Futuro</h2>
+        <form onSubmit={handlePagarSubmit}>
+          <p>Registre custos futuros (Aluguel, Luz). Irá para "A Pagar".</p>
           <div className="input-group">
             <label>Descrição</label>
-            <input name="descricao" value={contaForm.descricao} onChange={handleContaChange} required />
+            <input name="descricao" value={contaPagarForm.descricao} onChange={handlePagarChange} required />
           </div>
           <div className="input-group">
             <label>Valor (R$)</label>
-            <input name="valor_brl" type="number" step="0.01" value={contaForm.valor_brl} onChange={handleContaChange} required />
+            <input name="valor_brl" type="number" step="0.01" value={contaPagarForm.valor_brl} onChange={handlePagarChange} required />
           </div>
           <div className="input-group">
             <label>Data de Vencimento</label>
-            <input name="data_vencimento" type="date" value={contaForm.data_vencimento} onChange={handleContaChange} required />
+            <input name="data_vencimento" type="date" value={contaPagarForm.data_vencimento} onChange={handlePagarChange} required />
           </div>
-          <button type="submit">Registrar Conta</button>
+          <button type="submit">Agendar Custo</button>
+        </form>
+      </div>
+
+      {/* --- 2. NOVO Formulário 3: Registrar Recebimento Futuro --- */}
+      <div>
+        <h2>Registrar Recebimento Futuro</h2>
+        <form onSubmit={handleReceberSubmit}>
+          <p>Registre receitas futuras (Salário, Venda antiga). Irá para "A Receber".</p>
+          <div className="input-group">
+            <label>Descrição</label>
+            <input name="descricao" value={contaReceberForm.descricao} onChange={handleReceberChange} required placeholder="Ex: Salário sabio" />
+          </div>
+          <div className="input-group">
+            <label>Valor (R$)</label>
+            <input name="valor_brl" type="number" step="0.01" value={contaReceberForm.valor_brl} onChange={handleReceberChange} required />
+          </div>
+          <div className="input-group">
+            <label>Data de Recebimento</label>
+            <input name="data_vencimento" type="date" value={contaReceberForm.data_vencimento} onChange={handleReceberChange} required />
+          </div>
+          <button type="submit">Agendar Recebimento</button>
         </form>
       </div>
     </div>
