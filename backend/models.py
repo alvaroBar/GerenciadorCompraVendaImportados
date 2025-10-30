@@ -20,17 +20,18 @@ class ItemEstoque(db.Model):
     data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     status = db.Column(db.String(50), nullable=False, default='Em Estoque')
     produto_catalogo_id = db.Column(db.Integer, db.ForeignKey('produto_catalogo.id'), nullable=False)
-    preco_compra_usd = db.Column(db.Float, nullable=False)
-    peso_kg = db.Column(db.Float, nullable=False)
-    iof_percent = db.Column(db.Float, nullable=False)
-    taxa_dolar = db.Column(db.Float, nullable=False)
-    shipping_method = db.Column(db.String(50), nullable=False, default='Air')
-    custo_adicional_brl = db.Column(db.Float, nullable=False, default=0.0)
-    custo_produto_brl = db.Column(db.Float, nullable=False)
-    custo_iof_brl = db.Column(db.Float, nullable=False)
-    custo_frete_brl = db.Column(db.Float, nullable=False)
-    custo_total_brl = db.Column(db.Float, nullable=False)
-    lucro_estimado_brl = db.Column(db.Float, nullable=False)
+    # ... (todos os campos de custo e lucro permanecem os mesmos) ...
+    preco_compra_usd = db.Column(db.Float, nullable=False);
+    peso_kg = db.Column(db.Float, nullable=False);
+    iof_percent = db.Column(db.Float, nullable=False);
+    taxa_dolar = db.Column(db.Float, nullable=False);
+    shipping_method = db.Column(db.String(50), nullable=False, default='Air');
+    custo_adicional_brl = db.Column(db.Float, nullable=False, default=0.0);
+    custo_produto_brl = db.Column(db.Float, nullable=False);
+    custo_iof_brl = db.Column(db.Float, nullable=False);
+    custo_frete_brl = db.Column(db.Float, nullable=False);
+    custo_total_brl = db.Column(db.Float, nullable=False);
+    lucro_estimado_brl = db.Column(db.Float, nullable=False);
     lucro_estimado_percent = db.Column(db.Float, nullable=False)
 
     def to_dict(self):
@@ -49,14 +50,13 @@ class ItemEstoque(db.Model):
 
 
 class Venda(db.Model):
-    # ... (sem mudanças)
     id = db.Column(db.Integer, primary_key=True)
-    data_venda = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # 1. MUDANÇA: Data da Venda agora é fornecida, não mais 'default'
+    data_venda = db.Column(db.DateTime, nullable=False)
     preco_venda_final_brl = db.Column(db.Float, nullable=False)
     lucro_real_brl = db.Column(db.Float, nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=False, unique=True)
     item_vendido = db.relationship('ItemEstoque', backref=db.backref('venda', uselist=False))
-    # Relação: Uma venda pode ter várias contas a receber
     contas_a_receber = db.relationship('ContaAReceber', backref='venda', lazy=True)
 
     def to_dict(self):
@@ -71,12 +71,12 @@ class Venda(db.Model):
 
 class Transacao(db.Model):
     # ... (sem mudanças)
-    id = db.Column(db.Integer, primary_key=True)
-    data = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    tipo = db.Column(db.String(50), nullable=False)
-    descricao = db.Column(db.String(200), nullable=False)
-    valor_brl = db.Column(db.Float, nullable=False)
-    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=True)
+    id = db.Column(db.Integer, primary_key=True);
+    data = db.Column(db.DateTime, nullable=False, default=datetime.utcnow);
+    tipo = db.Column(db.String(50), nullable=False);
+    descricao = db.Column(db.String(200), nullable=False);
+    valor_brl = db.Column(db.Float, nullable=False);
+    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=True);
     venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True)
 
     def to_dict(self):
@@ -86,11 +86,11 @@ class Transacao(db.Model):
 
 class ContaAPagar(db.Model):
     # ... (sem mudanças)
-    id = db.Column(db.Integer, primary_key=True)
-    descricao = db.Column(db.String(200), nullable=False)
-    valor_brl = db.Column(db.Float, nullable=False)
-    data_vencimento = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.String(50), nullable=False, default='Pendente')
+    id = db.Column(db.Integer, primary_key=True);
+    descricao = db.Column(db.String(200), nullable=False);
+    valor_brl = db.Column(db.Float, nullable=False);
+    data_vencimento = db.Column(db.DateTime, nullable=False);
+    status = db.Column(db.String(50), nullable=False, default='Pendente');
     transacao_id = db.Column(db.Integer, db.ForeignKey('transacao.id'), nullable=True)
 
     def to_dict(self):
@@ -101,24 +101,24 @@ class ContaAPagar(db.Model):
         }
 
 
-# --- 1. NOVO MODELO 'ContaAReceber' ---
 class ContaAReceber(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=False)
+    # 2. MUDANÇA: Adicionada 'descricao' para clareza (ex: "Parcela 1/2")
+    descricao = db.Column(db.String(200), nullable=True)
     valor_parcela_brl = db.Column(db.Float, nullable=False)
     data_vencimento = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(50), nullable=False, default='Pendente')  # Pendente, Pago
-
-    # Link para a transação que recebeu esta conta
     transacao_id = db.Column(db.Integer, db.ForeignKey('transacao.id'), nullable=True)
 
     def to_dict(self):
         return {
             'id': self.id,
             'venda_id': self.venda_id,
-            'nome_produto': self.venda.item_vendido.produto_catalogo.nome,  # Puxa o nome do produto
+            'nome_produto': self.venda.item_vendido.produto_catalogo.nome,
+            'descricao': self.descricao,
             'valor_parcela_brl': self.valor_parcela_brl,
-            'data_vencimento': self.data_vencimento.isoformat().split('T')[0],  # AAAA-MM-DD
+            'data_vencimento': self.data_vencimento.isoformat().split('T')[0],
             'status': self.status,
             'transacao_id': self.transacao_id
         }

@@ -423,3 +423,36 @@ th {
   border-radius: 4px;
   margin-top: 15px;
 }
+
+/* --- Estilos da Lista de Parcelas no Modal --- */
+.parcelas-list {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.parcelas-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px;
+  background: #eee;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+.parcelas-list li span {
+  font-weight: bold;
+}
+.parcelas-list li button {
+  background: #dc3545;
+  border: none;
+  color: white;
+  padding: 2px 8px;
+  font-size: 0.8em;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.parcelas-total {
+  font-weight: bold;
+  margin-top: 10px;
+}
