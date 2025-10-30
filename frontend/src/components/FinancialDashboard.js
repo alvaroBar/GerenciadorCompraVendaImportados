@@ -8,7 +8,8 @@ function FinancialDashboard({ api }) {
     balanco_total_brl: 0,
     total_a_pagar_brl: 0,
     total_a_receber_brl: 0,
-    caixa_futuro_projetado_brl: 0, // 1. Novo estado
+    total_estoque_valor_venda_brl: 0, // 1. Novo estado
+    patrimonio_total_projetado_brl: 0 // 2. Novo estado
   });
 
   useEffect(() => {
@@ -43,12 +44,18 @@ function FinancialDashboard({ api }) {
           <h3>A Pagar (Pendente)</h3>
           <p className="apagar">{formatBRL(balanco.total_a_pagar_brl)}</p>
         </div>
-        {/* 2. Novo Card */}
+
+        {/* --- 3. NOVOS CARDS --- */}
         <div className="metric-item">
-          <h3>Caixa Futuro (Projetado)</h3>
-          <p className="balanco">{formatBRL(balanco.caixa_futuro_projetado_brl)}</p>
+          <h3>Valor do Estoque (Venda)</h3>
+          <p>{formatBRL(balanco.total_estoque_valor_venda_brl)}</p>
         </div>
-        {/* Cards de totais (opcionais, mas úteis) */}
+        <div className="metric-item">
+          <h3>Patrimônio Total (Projetado)</h3>
+          <p className="patrimonio">{formatBRL(balanco.patrimonio_total_projetado_brl)}</p>
+        </div>
+
+        {/* --- Totais movidos para menor destaque --- */}
         <div className="metric-item">
           <small>Receita Total (Paga)</small>
           <p className="receita" style={{fontSize: "1.2em"}}>{formatBRL(balanco.total_receitas_brl)}</p>

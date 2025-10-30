@@ -4,8 +4,6 @@ import Modal from 'react-modal';
 import { Fragment } from 'react';
 
 const SHIPPING_RATES = { 'Air': 22.5, 'Sea': 12.0 };
-
-// Pega a data de hoje no formato AAAA-MM-DD
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
 function StockItemList({ api, onDataChanged }) {
@@ -16,21 +14,20 @@ function StockItemList({ api, onDataChanged }) {
   const [editFormData, setEditFormData] = useState({});
   const [openRowId, setOpenRowId] = useState(null);
 
-  // Estados para o Modal de Venda
   const [vendaForm, setVendaForm] = useState({
     data_venda: getTodayDate(),
     preco_venda_final_brl: "",
     metodo_pagamento: "AVista",
   });
 
-  const [parcelas, setParcelas] = useState([]); // Array de objetos {descricao, valor, data}
-  const [parcelaForm, setParcelaForm] = useState({ // Form de uma nova parcela
+  const [parcelas, setParcelas] = useState([]);
+  const [parcelaForm, setParcelaForm] = useState({
     descricao: "",
     valor: "",
     data: ""
   });
 
-  // --- Funções Completas e Corrigidas ---
+  // --- Funções (sem mudanças) ---
 
   const loadItems = async () => {
     try {
@@ -60,13 +57,12 @@ function StockItemList({ api, onDataChanged }) {
       });
     }
     if (mode === 'sell') {
-      // Reseta o formulário de Venda
       setVendaForm({
         data_venda: getTodayDate(),
         preco_venda_final_brl: item.preco_venda_estimado_brl.toFixed(2),
         metodo_pagamento: "AVista",
       });
-      setParcelas([]); // Limpa parcelas anteriores
+      setParcelas([]);
       setParcelaForm({ descricao: "Parcela 1", valor: "", data: "" });
     }
     setModalIsOpen(true);
@@ -76,7 +72,6 @@ function StockItemList({ api, onDataChanged }) {
     setModalIsOpen(false);
     setCurrentItem(null);
     setEditFormData({});
-    // Limpa também os formulários de venda
     setVendaForm({data_venda: getTodayDate(), preco_venda_final_brl: "", metodo_pagamento: "AVista"});
     setParcelas([]);
     setParcelaForm({ descricao: "", valor: "", data: "" });
@@ -99,7 +94,7 @@ function StockItemList({ api, onDataChanged }) {
   };
 
   const handleDelete = async (id) => {
-     if (!window.confirm("Tem certeza que deseja excluir este item? Esta ação também excluirá a transação de custo associada.")) return;
+     if (!window.confirm("Tem certeza que deseja excluir este item?")) return;
     try {
       await api.delete(`/estoque/${id}`);
       onDataChanged();
@@ -108,7 +103,6 @@ function StockItemList({ api, onDataChanged }) {
     }
   };
 
-  // Funções do Modal de Venda
   const handleVendaFormChange = (e) => {
     setVendaForm({ ...vendaForm, [e.target.name]: e.target.value });
   };
@@ -194,6 +188,19 @@ function StockItemList({ api, onDataChanged }) {
     };
   };
 
+  // --- 1. FUNÇÃO DE FORMATAÇÃO E CÁLCULOS TOTAIS ---
+  const formatBRL = (value) => `R$ ${value.toFixed(2)}`;
+
+  const totalCusto = stockItems.reduce(
+    (acc, item) => acc + (item.custo_total_brl || 0), 0
+  );
+  const totalVendaEstimada = stockItems.reduce(
+    (acc, item) => acc + (item.preco_venda_estimado_brl || 0), 0
+  );
+  const totalLucroEstimado = stockItems.reduce(
+    (acc, item) => acc + (item.lucro_estimado_brl || 0), 0
+  );
+
   // --- Renderização ---
   return (
     <div>
@@ -218,10 +225,10 @@ function StockItemList({ api, onDataChanged }) {
                 <tr className="product-row" onClick={() => handleRowClick(item.id)}>
                   <td>{item.nome_produto} {isRowOpen ? '▲' : '▼'}</td>
                   <td>{formatarData(item.data_cadastro)}</td>
-                  <td>R$ {item.custo_total_brl.toFixed(2)}</td>
-                  <td>R$ {item.preco_venda_estimado_brl.toFixed(2)}</td>
+                  <td>{formatBRL(item.custo_total_brl)}</td>
+                  <td>{formatBRL(item.preco_venda_estimado_brl)}</td>
                   <td style={{color: item.lucro_estimado_brl < 0 ? 'red' : 'green'}}>
-                    R$ {item.lucro_estimado_brl.toFixed(2)}
+                    {formatBRL(item.lucro_estimado_brl)}
                   </td>
                   <td style={{color: item.lucro_estimado_percent < 0 ? 'red' : 'green'}}>
                     {item.lucro_estimado_percent.toFixed(2)}%
@@ -243,29 +250,29 @@ function StockItemList({ api, onDataChanged }) {
                           return (
                             <ul>
                               <li>
-                                <strong>Produto:</strong> R$ {valores.custoProdutoBRL.toFixed(2)}
+                                <strong>Produto:</strong> {formatBRL(valores.custoProdutoBRL)}
                                 <span>(${item.preco_compra_usd.toFixed(2)} USD * Cotação R$ {valores.taxaDolar})</span>
                               </li>
                               <li>
-                                <strong>IOF:</strong> R$ {valores.custoIofBRL.toFixed(2)}
+                                <strong>IOF:</strong> {formatBRL(valores.custoIofBRL)}
                                 <span>({valores.iofPercent}% sobre o valor do produto)</span>
                               </li>
                               <li>
-                                <strong>Frete ({valores.shipping_method}):</strong> R$ {valores.custoFreteBRL.toFixed(2)}
+                                <strong>Frete ({valores.shipping_method}):</strong> {formatBRL(valores.custoFreteBRL)}
                                 <span>
                                   ({valores.peso} kg * ${valores.shipping_rate.toFixed(2)}/kg * Cotação R$ {valores.taxaDolar})
                                 </span>
                               </li>
                               {valores.custoAdicionalBRL > 0 && (
                                 <li style={{color: '#b26500'}}>
-                                  <strong>Custo Adicional (Rateado):</strong> R$ {valores.custoAdicionalBRL.toFixed(2)}
+                                  <strong>Custo Adicional (Rateado):</strong> {formatBRL(valores.custoAdicionalBRL)}
                                 </li>
                               )}
                             </ul>
                           );
                         })()}
                         <p className="breakdown-total">
-                          Custo Total (BRL): R$ {item.custo_total_brl.toFixed(2)}
+                          Custo Total (BRL): {formatBRL(item.custo_total_brl)}
                         </p>
                       </div>
                     </td>
@@ -275,9 +282,30 @@ function StockItemList({ api, onDataChanged }) {
             );
           })}
         </tbody>
+
+        {/* --- 3. NOVO RODAPÉ COM OS TOTAIS --- */}
+        <tfoot>
+          <tr style={{borderTop: '2px solid #333'}}>
+            <td colSpan="2" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
+              Totais do Estoque:
+            </td>
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+              {formatBRL(totalCusto)}
+            </td>
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+              {formatBRL(totalVendaEstimada)}
+            </td>
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em', color: totalLucroEstimado < 0 ? 'red' : 'green' }}>
+              {formatBRL(totalLucroEstimado)}
+            </td>
+            {/* Células vazias para Lucro % e Ações */}
+            <td colSpan="2"></td>
+          </tr>
+        </tfoot>
+
       </table>
 
-      {/* --- Modal --- */}
+      {/* --- Modal (sem mudanças) --- */}
       <Modal
         isOpen={modalIsOpen}
         onRequestClose={closeModal}
@@ -319,10 +347,10 @@ function StockItemList({ api, onDataChanged }) {
                   <option value="Sea">Marítimo ($12.00/kg)</option>
                 </select>
               </div>
-              <div className="input-group">
+              {/* <div className="input-group">
                 <label htmlFor="edit_custo_adicional">Custo Adicional (R$)</label>
                 <input id="edit_custo_adicional" name="custo_adicional_brl" type="number" step="0.01" value={editFormData.custo_adicional_brl} onChange={handleEditChange} required />
-              </div>
+              </div> */}
               <div className="modal-actions">
                 <button type="button" onClick={closeModal}>Cancelar</button>
                 <button type="submit">Salvar Alterações</button>
@@ -336,7 +364,7 @@ function StockItemList({ api, onDataChanged }) {
           <div>
             <h2>Registrar Venda do Item</h2>
             <p><strong>Produto:</strong> {currentItem.nome_produto} (ID: {currentItem.id})</p>
-            <p><strong>Custo Total (BRL):</strong> R$ {currentItem.custo_total_brl.toFixed(2)}</p>
+            <p><strong>Custo Total (BRL):</strong> {formatBRL(currentItem.custo_total_brl)}</p>
 
             <form onSubmit={handleSellSubmit}>
               <div className="input-group">
@@ -379,13 +407,13 @@ function StockItemList({ api, onDataChanged }) {
                       <ul className="parcelas-list">
                         {parcelas.map(p => (
                           <li key={p.id}>
-                            {p.descricao} (R$ {p.valor}) - Venc: {formatarData(p.data)}
+                            {p.descricao} ({formatBRL(parseFloat(p.valor))}) - Venc: {formatarData(p.data)}
                             <button type="button" onClick={() => removeParcela(p.id)}>&times;</button>
                           </li>
                         ))}
                       </ul>
                       <p className="parcelas-total">
-                        Total Parcelado: R$ {parcelas.reduce((acc, p) => acc + parseFloat(p.valor || 0), 0).toFixed(2)}
+                        Total Parcelado: {formatBRL(parcelas.reduce((acc, p) => acc + parseFloat(p.valor || 0), 0))}
                       </p>
                     </>
                   )}

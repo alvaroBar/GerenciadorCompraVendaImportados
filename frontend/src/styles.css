@@ -461,3 +461,25 @@ th {
 .manual-transactions {
   margin-top: 20px;
 }
+
+/* --- Estilos do Painel Financeiro (Adição) --- */
+.metric-item .patrimonio {
+  color: #004085; /* Um azul mais escuro */
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+/* --- Estilos do Botão Reverter --- */
+.action-buttons .btn-reverter {
+  background-color: #6c757d; /* Cinza */
+  color: white;
+  border-color: #6c757d;
+  padding: 4px 8px;
+  font-size: 0.8em;
+}
+
+.action-buttons .btn-reverter:hover {
+  background-color: #5a6268;
+}

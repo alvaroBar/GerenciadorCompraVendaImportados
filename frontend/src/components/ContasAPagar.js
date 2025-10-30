@@ -3,22 +3,33 @@ import React, { useEffect, useState } from "react";
 import Modal from 'react-modal';
 
 function ContasAPagar({ api, onDataChanged }) {
-  const [contas, setContas] = useState([]);
+  const [contasPendentes, setContasPendentes] = useState([]);
+  const [contasPagas, setContasPagas] = useState([]);
+
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
 
-  // Carrega apenas as contas pendentes
-  const loadContas = async () => {
+  const loadContasPendentes = async () => {
     try {
       const response = await api.get("/contas-a-pagar?status=Pendente");
-      setContas(response.data);
+      setContasPendentes(response.data);
     } catch (error) {
-      console.error("Erro ao carregar contas a pagar:", error);
+      console.error("Erro ao carregar contas pendentes:", error);
+    }
+  };
+
+  const loadContasPagas = async () => {
+    try {
+      const response = await api.get("/contas-a-pagar?status=Pago");
+      setContasPagas(response.data);
+    } catch (error) {
+      console.error("Erro ao carregar contas pagas:", error);
     }
   };
 
   useEffect(() => {
-    loadContas();
+    loadContasPendentes();
+    loadContasPagas();
   }, []);
 
   const openModal = (item) => {
@@ -35,7 +46,8 @@ function ContasAPagar({ api, onDataChanged }) {
     setCurrentItem({ ...currentItem, [e.target.name]: e.target.value });
   };
 
-  // Ação de Pagar
+  // --- Ações ---
+
   const handlePagarConta = async (id) => {
     if (!window.confirm("Confirmar o pagamento desta conta? Esta ação debitará o valor do seu caixa.")) {
       return;
@@ -49,7 +61,6 @@ function ContasAPagar({ api, onDataChanged }) {
     }
   };
 
-  // Ação de Editar
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -61,7 +72,6 @@ function ContasAPagar({ api, onDataChanged }) {
     }
   };
 
-  // Ação de Excluir
   const handleDelete = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir esta conta pendente?")) {
       return;
@@ -74,6 +84,19 @@ function ContasAPagar({ api, onDataChanged }) {
     }
   };
 
+  const handleReverterPagamento = async (id) => {
+    if (!window.confirm("Reverter este pagamento? O valor do custo será estornado do seu caixa e a conta voltará para 'Pendente'.")) {
+      return;
+    }
+    try {
+      await api.post(`/contas-a-pagar/${id}/reverter`);
+      alert('Pagamento revertido com sucesso!');
+      onDataChanged();
+    } catch (error) {
+      alert('Erro ao reverter pagamento.');
+    }
+  };
+
   const formatarData = (isoString) => {
     if (!isoString) return 'N/A';
     const date = new Date(isoString);
@@ -81,8 +104,16 @@ function ContasAPagar({ api, onDataChanged }) {
     return date.toLocaleDateString('pt-BR');
   };
 
+  // --- 1. CÁLCULO DO TOTAL PENDENTE ---
+  const totalPendente = contasPendentes.reduce(
+    (acc, conta) => acc + (conta.valor_brl || 0),
+    0
+  );
+
   return (
     <div className="contas-a-pagar">
+
+      {/* --- Tabela de Contas Pendentes --- */}
       <h2>Contas a Pagar (Pendentes)</h2>
       <table>
         <thead>
@@ -94,8 +125,8 @@ function ContasAPagar({ api, onDataChanged }) {
           </tr>
         </thead>
         <tbody>
-          {contas.length === 0 && ( <tr><td colSpan="4">Nenhuma conta pendente.</td></tr> )}
-          {contas.map((conta) => (
+          {contasPendentes.length === 0 && ( <tr><td colSpan="4">Nenhuma conta pendente.</td></tr> )}
+          {contasPendentes.map((conta) => (
             <tr key={conta.id}>
               <td>{conta.descricao}</td>
               <td>{formatarData(conta.data_vencimento)}</td>
@@ -108,9 +139,49 @@ function ContasAPagar({ api, onDataChanged }) {
             </tr>
           ))}
         </tbody>
+
+        {/* --- 2. NOVO RODAPÉ COM O TOTAL --- */}
+        <tfoot>
+          <tr>
+            <td colSpan="2" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
+              Total Pendente:
+            </td>
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+              R$ {totalPendente.toFixed(2)}
+            </td>
+            <td></td> {/* Célula vazia para a coluna Ação */}
+          </tr>
+        </tfoot>
+
       </table>
 
-      {/* --- Modal de Edição --- */}
+      {/* --- Tabela de Contas Pagas (sem mudanças) --- */}
+      <h2 style={{marginTop: '30px'}}>Contas Pagas (Histórico)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Descrição</th>
+            <th>Vencimento</th>
+            <th>Valor (R$)</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contasPagas.length === 0 && ( <tr><td colSpan="4">Nenhuma conta paga.</td></tr> )}
+          {contasPagas.map((conta) => (
+            <tr key={conta.id}>
+              <td>{conta.descricao}</td>
+              <td>{formatarData(conta.data_vencimento)}</td>
+              <td>R$ {conta.valor_brl.toFixed(2)}</td>
+              <td className="action-buttons">
+                <button className="btn-reverter" onClick={() => handleReverterPagamento(conta.id)}>Reverter</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* --- Modal de Edição (sem mudanças) --- */}
       <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="modal-content" overlayClassName="modal-overlay">
         <button className="modal-close-button" onClick={closeModal}>&times;</button>
         {currentItem && (
