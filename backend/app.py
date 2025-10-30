@@ -302,6 +302,7 @@ def pagar_conta(id):
 
 
 # --- 5. NOVA ROTA DE ESTIMATIVA ---
+# --- 5. ROTA DE ESTIMATIVA (ATUALIZADA) ---
 @app.route('/estimativa/calcular', methods=['POST'])
 def calcular_estimativa():
     data = request.json
@@ -309,41 +310,56 @@ def calcular_estimativa():
     try:
         preco_compra_usd = float(data['preco_compra_usd'])
         peso_kg = float(data['peso_kg'])
-        iof_percent = float(data['iof_percent'])
+        iof_percent = float(data['iof_percent'])  # IOF das Config. Globais
         taxa_dolar = float(data['taxa_dolar'])
         shipping_method = data.get('shipping_method', 'Air')
 
-        # --- Cenário 1: Custo Real Detalhado ---
-        # (Reutiliza a lógica de cálculo de custos)
+        # --- Cálculo do Frete (usado em ambos os cenários) ---
         taxa_envio = SHIPPING_RATES.get(shipping_method, SHIPPING_RATES['Air'])
+        custo_frete_brl_real = (peso_kg * taxa_envio) * taxa_dolar
 
-        custo_produto_brl = preco_compra_usd * taxa_dolar
-        custo_iof_brl = (preco_compra_usd * (iof_percent / 100)) * taxa_dolar
-        custo_frete_brl = (peso_kg * taxa_envio) * taxa_dolar
-        custo_total_real_brl = custo_produto_brl + custo_iof_brl + custo_frete_brl
+        # --- Cenário 1: Custo Real Detalhado (Cálculo Padrão) ---
+        # (Este cálculo permanece o mesmo)
+        custo_produto_brl_real = preco_compra_usd * taxa_dolar
+        custo_iof_brl_real = (preco_compra_usd * (iof_percent / 100)) * taxa_dolar
+        custo_total_real_brl = custo_produto_brl_real + custo_iof_brl_real + custo_frete_brl_real
 
-        # --- Cenário 2: Custo por Taxa Rápida (Ex: 60% ou 7%) ---
-        # Você pode alterar o valor de 'TAXA_RAPIDA_PERCENT'
-        TAXA_RAPIDA_PERCENT = 60.0  # 60% como exemplo de imposto de importação
+        # --- Cenário 2: Nova Estimativa (7% + IOF 3.5% + Frete) ---
 
-        custo_produto_brl_taxa = preco_compra_usd * taxa_dolar
-        custo_imposto_brl = custo_produto_brl_taxa * (TAXA_RAPIDA_PERCENT / 100)
-        custo_total_estimado_brl = custo_produto_brl_taxa + custo_imposto_brl
+        # 1. Preço base em BRL
+        preco_base_brl = preco_compra_usd * taxa_dolar
+
+        # 2. Aplicar Taxa 7%
+        TAXA_7_PERCENT = 0.07  # 7%
+        custo_taxa_7_brl = preco_base_brl * TAXA_7_PERCENT
+        valor_com_taxa_7 = preco_base_brl + custo_taxa_7_brl
+
+        # 3. Aplicar IOF 3.5% sobre o *novo total*
+        TAXA_IOF_ESTIMADA_PERCENT = 0.035  # 3.5%
+        custo_iof_estimado_brl = valor_com_taxa_7 * TAXA_IOF_ESTIMADA_PERCENT
+        valor_com_iof = valor_com_taxa_7 + custo_iof_estimado_brl
+
+        # 4. Adicionar Frete (calculado no início)
+        custo_total_estimado_brl = valor_com_iof + custo_frete_brl_real
 
         return jsonify({
             'real_detalhado': {
-                'custo_produto_brl': custo_produto_brl,
-                'custo_iof_brl': custo_iof_brl,
-                'custo_frete_brl': custo_frete_brl,
+                'custo_produto_brl': custo_produto_brl_real,
+                'custo_iof_brl': custo_iof_brl_real,
+                'custo_frete_brl': custo_frete_brl_real,
                 'custo_total_brl': custo_total_real_brl,
                 'iof_usado': iof_percent,
                 'taxa_envio_usada': taxa_envio
             },
-            'estimativa_taxa_rapida': {
-                'custo_produto_brl': custo_produto_brl_taxa,
-                'custo_imposto_brl': custo_imposto_brl,
+            # Novo objeto de resultado
+            'estimativa_7_percent': {
+                'custo_produto_brl': preco_base_brl,
+                'custo_taxa_7_brl': custo_taxa_7_brl,
+                'custo_iof_estimado_brl': custo_iof_estimado_brl,
+                'custo_frete_brl': custo_frete_brl_real,  # Reutiliza o cálculo do frete
                 'custo_total_brl': custo_total_estimado_brl,
-                'taxa_usada': TAXA_RAPIDA_PERCENT
+                'taxa_7_usada': 7.0,
+                'taxa_iof_usada': 3.5
             }
         }), 200
 

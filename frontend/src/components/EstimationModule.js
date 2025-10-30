@@ -1,5 +1,5 @@
 // frontend/src/components/EstimationModule.js
-import React, { useState, useEffect } from "react"; // 1. Importar useEffect
+import React, { useState, useEffect } from "react";
 
 function EstimationModule({ api, globalSettings }) {
 
@@ -9,14 +9,10 @@ function EstimationModule({ api, globalSettings }) {
   });
 
   const [moedaCompra, setMoedaCompra] = useState("USD");
-
-  // 2. Novo estado para o método de envio, inicializado pelo global
   const [shippingMethod, setShippingMethod] = useState(globalSettings.shipping_method);
-
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 3. Efeito para atualizar o estado local se a config global mudar
   useEffect(() => {
     setShippingMethod(globalSettings.shipping_method);
   }, [globalSettings.shipping_method]);
@@ -31,7 +27,7 @@ function EstimationModule({ api, globalSettings }) {
     setResultado(null);
 
     try {
-      // --- Lógica de Conversão de Moeda (sem mudanças) ---
+      // --- Lógica de Conversão de Moeda ---
       let precoCompraEmUSD;
       const valorDigitado = parseFloat(form.preco_compra_valor);
       const taxaDolar = parseFloat(globalSettings.taxa_dolar);
@@ -47,16 +43,12 @@ function EstimationModule({ api, globalSettings }) {
         precoCompraEmUSD = valorDigitado;
       }
 
-      // 4. Prepara os dados para enviar à API
+      // --- Preparar dados para API ---
       const dataToSend = {
         peso_kg: parseFloat(form.peso_kg),
         preco_compra_usd: precoCompraEmUSD,
-
-        // Pega o IOF e Dólar das configs globais
         iof_percent: globalSettings.iof_percent,
         taxa_dolar: globalSettings.taxa_dolar,
-
-        // 5. Envia o método de envio do estado local
         shipping_method: shippingMethod
       };
 
@@ -76,9 +68,8 @@ function EstimationModule({ api, globalSettings }) {
     <div className="estimation-module">
       <h2>Módulo de Orçamento (Estimativa)</h2>
       <form onSubmit={handleSubmit}>
+        {/* --- Seção de Inputs (sem mudanças) --- */}
         <div className="estimation-form-inputs">
-
-          {/* Campo de Preço (sem mudanças) */}
           <div className="input-group">
             <label htmlFor="est_preco_compra_valor">Preço Compra</label>
             <input
@@ -96,8 +87,6 @@ function EstimationModule({ api, globalSettings }) {
               <option value="BRL">BRL (R$)</option>
             </select>
           </div>
-
-          {/* Campo de Peso (sem mudanças) */}
           <div className="input-group">
             <label htmlFor="est_peso_kg">Peso (kg)</label>
             <input
@@ -111,21 +100,18 @@ function EstimationModule({ api, globalSettings }) {
               required
             />
           </div>
-
-          {/* 6. Novo Seletor de Método de Envio */}
           <div className="input-group">
             <label htmlFor="est_shipping">Método de Envio</label>
             <select
               id="est_shipping"
               name="shipping_method"
-              value={shippingMethod} // Controlado pelo estado local
-              onChange={(e) => setShippingMethod(e.target.value)} // Atualiza o estado local
+              value={shippingMethod}
+              onChange={(e) => setShippingMethod(e.target.value)}
             >
               <option value="Air">Aéreo ($22.50/kg)</option>
               <option value="Sea">Marítimo ($12.00/kg)</option>
             </select>
           </div>
-
           <div className="input-group">
             <label style={{ visibility: 'hidden' }}>Calcular</label>
             <button type="submit" disabled={loading}>
@@ -135,50 +121,42 @@ function EstimationModule({ api, globalSettings }) {
         </div>
       </form>
 
-      {/* --- Resultados (sem mudanças) --- */}
+      {/* --- Resultados (ATUALIZADOS) --- */}
       {resultado && (
         <div className="estimation-results">
-          {/* Coluna 1: Custo Real */}
-          <div>
-            <h4>Custo Real (Detalhado)</h4>
-            <ul>
-              <li>
-                <strong>Produto (em BRL):</strong>
-                <span>{formatBRL(resultado.real_detalhado.custo_produto_brl)}</span>
-              </li>
-              <li>
-                <strong>IOF ({resultado.real_detalhado.iof_usado}%):</strong>
-                <span>{formatBRL(resultado.real_detalhado.custo_iof_brl)}</span>
-              </li>
-              <li>
-                <strong>Frete (${resultado.real_detalhado.taxa_envio_usada.toFixed(2)}/kg):</strong>
-                <span>{formatBRL(resultado.real_detalhado.custo_frete_brl)}</span>
-              </li>
-            </ul>
-            <div className="estimation-total">
-              <strong>Total:</strong>
-              <span>{formatBRL(resultado.real_detalhado.custo_total_brl)}</span>
-            </div>
-          </div>
 
-          {/* Coluna 2: Custo por Taxa Rápida */}
-          <div>
-            <h4>Custo Estimado (Taxa {resultado.estimativa_taxa_rapida.taxa_usada}%)</h4>
-            <ul>
-              <li>
-                <strong>Produto (em BRL):</strong>
-                <span>{formatBRL(resultado.estimativa_taxa_rapida.custo_produto_brl)}</span>
-              </li>
-              <li>
-                <strong>Imposto ({resultado.estimativa_taxa_rapida.taxa_usada}%):</strong>
-                <span>{formatBRL(resultado.estimativa_taxa_rapida.custo_imposto_brl)}</span>
-              </li>
-            </ul>
-            <div className="estimation-total">
-              <strong>Total:</strong>
-              <span>{formatBRL(resultado.estimativa_taxa_rapida.custo_total_brl)}</span>
+          {/* --- Coluna 1: Custo Real (REMOVIDA) --- */}
+          {/* O card "Custo Real (Detalhado)" foi removido daqui. */}
+
+          {/* --- Coluna 2: Nova Estimativa (MANTIDA) --- */}
+          {resultado.estimativa_7_percent && (
+            <div>
+              <h4>Custo Estimado (Taxa 7% + IOF 3.5%)</h4>
+              <ul>
+                <li>
+                  <strong>Produto (em BRL):</strong>
+                  <span>{formatBRL(resultado.estimativa_7_percent.custo_produto_brl)}</span>
+                </li>
+                <li>
+                  <strong>Taxa ({resultado.estimativa_7_percent.taxa_7_usada}%):</strong>
+                  <span>{formatBRL(resultado.estimativa_7_percent.custo_taxa_7_brl)}</span>
+                </li>
+                <li>
+                  <strong>IOF ({resultado.estimativa_7_percent.taxa_iof_usada}%):</strong>
+                  <span>{formatBRL(resultado.estimativa_7_percent.custo_iof_estimado_brl)}</span>
+                </li>
+                <li>
+                  <strong>Frete:</strong>
+                  <span>{formatBRL(resultado.estimativa_7_percent.custo_frete_brl)}</span>
+                </li>
+              </ul>
+              <div className="estimation-total">
+                <strong>Total:</strong>
+                <span>{formatBRL(resultado.estimativa_7_percent.custo_total_brl)}</span>
+              </div>
             </div>
-          </div>
+          )}
+
         </div>
       )}
     </div>
