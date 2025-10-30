@@ -7,7 +7,8 @@ import SettingsForm from "./components/SettingsForm";
 import EstimationModule from "./components/EstimationModule";
 import StockItemForm from "./components/StockItemForm";
 import ContasAPagar from "./components/ContasAPagar";
-import CostAllocator from "./components/CostAllocator"; // 1. Importar
+import CostAllocator from "./components/CostAllocator";
+import ContasAReceber from "./components/ContasAReceber"; // 1. Importar
 import StockItemList from "./components/StockItemList";
 import SalesHistory from "./components/SalesHistory";
 import api from "./api";
@@ -33,16 +34,16 @@ function App() {
       <FinancialForms api={api} onDataChanged={handleDataChanged} />
       <SettingsForm settings={globalSettings} onSettingsChange={setGlobalSettings} />
       <EstimationModule api={api} globalSettings={globalSettings} />
+      <CostAllocator api={api} key={refreshKey + 3} onDataChanged={handleDataChanged} />
+      <StockItemForm api={api} onItemAdded={handleDataChanged} globalSettings={globalSettings} />
 
-      {/* 2. Adicionar o Rateador de Custo */}
-      {/* Ele precisa do 'refreshKey' para recarregar a lista de itens */}
-      <CostAllocator
+      {/* 2. Adicionar a lista de Contas a Receber */}
+      <ContasAReceber
         api={api}
-        key={refreshKey + 3}
+        key={refreshKey + 4} // Chave única
         onDataChanged={handleDataChanged}
       />
 
-      <StockItemForm api={api} onItemAdded={handleDataChanged} globalSettings={globalSettings} />
       <ContasAPagar api={api} key={refreshKey + 2} onDataChanged={handleDataChanged} />
       <StockItemList api={api} key={refreshKey} onDataChanged={handleDataChanged} />
       <SalesHistory api={api} key={refreshKey + 1} />

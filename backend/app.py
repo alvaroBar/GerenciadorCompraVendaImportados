@@ -3,8 +3,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from database import db
 from sqlalchemy.sql import func
-from datetime import datetime
-from models import ProdutoCatalogo, ItemEstoque, Venda, Transacao, ContaAPagar
+from datetime import datetime, timedelta  # 1. Importar timedelta
+# 2. Importar ContaAReceber
+from models import ProdutoCatalogo, ItemEstoque, Venda, Transacao, ContaAPagar, ContaAReceber
 
 app = Flask(__name__)
 CORS(app)
@@ -15,40 +16,26 @@ db.init_app(app)
 SHIPPING_RATES = {'Air': 22.5, 'Sea': 12.0}
 
 
-# --- 1. FUNÇÕES AUXILIARES (ATUALIZADAS) ---
-
+# --- Funções Auxiliares (sem mudanças) ---
 def calcular_custos_e_lucro(data, preco_venda_estimado_brl):
-    # Esta função agora calcula tudo
-
-    # Dados base
+    # ... (igual ao anterior)
     preco_compra_usd = float(data.get('preco_compra_usd'))
     peso_kg = float(data.get('peso_kg'))
     iof_percent = float(data.get('iof_percent'))
     taxa_dolar = float(data.get('taxa_dolar'))
     shipping_method = data.get('shipping_method', 'Air')
-    # Novo custo opcional
     custo_adicional_brl = float(data.get('custo_adicional_brl', 0.0))
-
-    # Custos primários em BRL
     shipping_rate = SHIPPING_RATES.get(shipping_method, SHIPPING_RATES['Air'])
     custo_produto_brl = preco_compra_usd * taxa_dolar
     custo_iof_brl = (preco_compra_usd * (iof_percent / 100)) * taxa_dolar
     custo_frete_brl = (peso_kg * shipping_rate) * taxa_dolar
-
-    # Custo Total agora inclui o custo adicional
     custo_total_brl = custo_produto_brl + custo_iof_brl + custo_frete_brl + custo_adicional_brl
-
-    # Cálculo do Lucro
     lucro_brl = preco_venda_estimado_brl - custo_total_brl
     lucro_percent = (lucro_brl / custo_total_brl) * 100 if custo_total_brl > 0 else 0
-
     return {
-        'custo_produto_brl': custo_produto_brl,
-        'custo_iof_brl': custo_iof_brl,
-        'custo_frete_brl': custo_frete_brl,
-        'custo_adicional_brl': custo_adicional_brl,
-        'custo_total_brl': custo_total_brl,
-        'lucro_estimado_brl': lucro_brl,
+        'custo_produto_brl': custo_produto_brl, 'custo_iof_brl': custo_iof_brl,
+        'custo_frete_brl': custo_frete_brl, 'custo_adicional_brl': custo_adicional_brl,
+        'custo_total_brl': custo_total_brl, 'lucro_estimado_brl': lucro_brl,
         'lucro_estimado_percent': lucro_percent
     }
 
@@ -56,23 +43,24 @@ def calcular_custos_e_lucro(data, preco_venda_estimado_brl):
 # --- ROTAS DO CATÁLOGO (sem mudanças) ---
 @app.route('/catalogo', methods=['GET'])
 def listar_catalogo():
+    # ... (igual)
     produtos = ProdutoCatalogo.query.order_by(ProdutoCatalogo.nome).all()
     return jsonify([p.to_dict() for p in produtos])
 
 
-# --- ROTAS DO ESTOQUE (ATUALIZADAS) ---
-
+# --- ROTAS DO ESTOQUE (sem mudanças, exceto 'vender_item') ---
 @app.route('/estoque', methods=['GET'])
 def listar_estoque():
+    # ... (igual)
     itens = ItemEstoque.query.filter_by(status='Em Estoque').order_by(ItemEstoque.data_cadastro.desc()).all()
     return jsonify([item.to_dict() for item in itens])
 
 
 @app.route('/estoque', methods=['POST'])
 def adicionar_item_estoque():
+    # ... (igual)
     data = request.json
     try:
-        # 1. Encontrar ou Criar Produto no Catálogo
         nome_produto = data['nome_produto']
         produto = ProdutoCatalogo.query.filter_by(nome=nome_produto).first()
         if not produto:
@@ -83,32 +71,19 @@ def adicionar_item_estoque():
             db.session.add(produto)
             db.session.flush()
 
-            # 2. Calcular Custos e Lucro (usando a nova função)
-        # O 'custo_adicional_brl' será 0.0 por padrão ao adicionar
         calculos = calcular_custos_e_lucro(data, produto.preco_venda_estimado_brl)
-
-        # 3. Criar o novo Item de Estoque
         novo_item = ItemEstoque(
             produto_catalogo_id=produto.id,
-            preco_compra_usd=float(data['preco_compra_usd']),
-            peso_kg=float(data['peso_kg']),
-            iof_percent=float(data['iof_percent']),
-            taxa_dolar=float(data['taxa_dolar']),
+            preco_compra_usd=float(data['preco_compra_usd']), peso_kg=float(data['peso_kg']),
+            iof_percent=float(data['iof_percent']), taxa_dolar=float(data['taxa_dolar']),
             shipping_method=data.get('shipping_method', 'Air'),
-
-            custo_produto_brl=calculos['custo_produto_brl'],
-            custo_iof_brl=calculos['custo_iof_brl'],
-            custo_frete_brl=calculos['custo_frete_brl'],
-            custo_adicional_brl=calculos['custo_adicional_brl'],
+            custo_produto_brl=calculos['custo_produto_brl'], custo_iof_brl=calculos['custo_iof_brl'],
+            custo_frete_brl=calculos['custo_frete_brl'], custo_adicional_brl=calculos['custo_adicional_brl'],
             custo_total_brl=calculos['custo_total_brl'],
-
-            lucro_estimado_brl=calculos['lucro_estimado_brl'],
-            lucro_estimado_percent=calculos['lucro_estimado_percent']
+            lucro_estimado_brl=calculos['lucro_estimado_brl'], lucro_estimado_percent=calculos['lucro_estimado_percent']
         )
         db.session.add(novo_item)
         db.session.flush()
-
-        # 4. Criar a Transação de 'Custo'
         transacao_custo = Transacao(
             tipo='Custo',
             descricao=f"Compra de {produto.nome} (ID Item: {novo_item.id})",
@@ -116,10 +91,8 @@ def adicionar_item_estoque():
             item_estoque_id=novo_item.id
         )
         db.session.add(transacao_custo)
-
         db.session.commit()
         return jsonify(novo_item.to_dict()), 201
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e)}), 400
@@ -127,16 +100,12 @@ def adicionar_item_estoque():
 
 @app.route('/estoque/<int:id>', methods=['PUT'])
 def atualizar_item_estoque(id):
+    # ... (igual)
     item = ItemEstoque.query.get_or_404(id)
     data = request.json
     try:
-        # --- 1. ATUALIZAR O PRODUTO CATÁLOGO (Se o preço de venda for enviado) ---
         if 'preco_venda_estimado_brl' in data:
             item.produto_catalogo.preco_venda_estimado_brl = float(data['preco_venda_estimado_brl'])
-            # (No futuro, podemos recalcular o lucro de TODOS os itens deste catálogo,
-            # mas por enquanto, vamos focar em recalcular apenas este item)
-
-        # --- 2. ATUALIZAR O ITEM DE ESTOQUE ---
         item.preco_compra_usd = float(data.get('preco_compra_usd', item.preco_compra_usd))
         item.peso_kg = float(data.get('peso_kg', item.peso_kg))
         item.iof_percent = float(data.get('iof_percent', item.iof_percent))
@@ -144,22 +113,17 @@ def atualizar_item_estoque(id):
         item.shipping_method = data.get('shipping_method', item.shipping_method)
         item.custo_adicional_brl = float(data.get('custo_adicional_brl', item.custo_adicional_brl))
 
-        # --- 3. RECALCULAR CUSTOS E LUCRO ---
-        # Usamos o preço de venda ATUALIZADO do catálogo
         preco_venda_atualizado = item.produto_catalogo.preco_venda_estimado_brl
-
-        # O to_dict() agora pega os valores atualizados do 'item'
         calculos = calcular_custos_e_lucro(item.to_dict(), preco_venda_atualizado)
 
-        item.custo_produto_brl = calculos['custo_produto_brl']
+        item.custo_produto_brl = calculos['custo_produto_brl'];
         item.custo_iof_brl = calculos['custo_iof_brl']
-        item.custo_frete_brl = calculos['custo_frete_brl']
+        item.custo_frete_brl = calculos['custo_frete_brl'];
         item.custo_adicional_brl = calculos['custo_adicional_brl']
         item.custo_total_brl = calculos['custo_total_brl']
-        item.lucro_estimado_brl = calculos['lucro_estimado_brl']
+        item.lucro_estimado_brl = calculos['lucro_estimado_brl'];
         item.lucro_estimado_percent = calculos['lucro_estimado_percent']
 
-        # --- 4. ATUALIZAR TRANSAÇÃO DE CUSTO ---
         transacao = Transacao.query.filter_by(item_estoque_id=item.id, tipo='Custo').first()
         if transacao:
             transacao.valor_brl = item.custo_total_brl
@@ -167,7 +131,6 @@ def atualizar_item_estoque(id):
 
         db.session.commit()
         return jsonify(item.to_dict())
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e)}), 400
@@ -189,31 +152,63 @@ def deletar_item_estoque(id):
         return jsonify({'erro': str(e)}), 500
 
 
+# --- 3. ROTA DE VENDER (ATUALIZADA) ---
 @app.route('/estoque/<int:id>/vender', methods=['POST'])
 def vender_item(id):
-    # ... (igual)
     item = ItemEstoque.query.get_or_404(id)
     data = request.json
-    if item.status == 'Vendido': return jsonify({'erro': 'Este item já foi vendido.'}), 400
-    if 'preco_venda_final_brl' not in data: return jsonify({'erro': 'Preço de venda final é obrigatório.'}), 400
+
+    if item.status == 'Vendido':
+        return jsonify({'erro': 'Este item já foi vendido.'}), 400
+
     try:
         preco_venda_final = float(data['preco_venda_final_brl'])
+        metodo_pagamento = data.get('metodo_pagamento', 'AVista')
+
+        # 1. Atualiza o status do item e cria a Venda
         item.status = 'Vendido'
         lucro_real = preco_venda_final - item.custo_total_brl
 
-        nova_venda = Venda(preco_venda_final_brl=preco_venda_final, lucro_real_brl=lucro_real, item_id=item.id)
-        db.session.add(nova_venda)
-        db.session.flush()
-
-        transacao_receita = Transacao(
-            tipo='Receita',
-            descricao=f"Venda de {item.produto_catalogo.nome} (ID Venda: {nova_venda.id})",
-            valor_brl=preco_venda_final,
-            item_estoque_id=item.id, venda_id=nova_venda.id
+        nova_venda = Venda(
+            preco_venda_final_brl=preco_venda_final,
+            lucro_real_brl=lucro_real,
+            item_id=item.id
         )
-        db.session.add(transacao_receita)
+        db.session.add(nova_venda)
+        db.session.flush()  # Pega o 'nova_venda.id'
+
+        # 2. Lógica de Pagamento
+        if metodo_pagamento == 'AVista':
+            # A VISTA: Cria a transação de Receita imediatamente
+            transacao_receita = Transacao(
+                tipo='Receita',
+                descricao=f"Venda à vista de {item.produto_catalogo.nome} (Venda ID: {nova_venda.id})",
+                valor_brl=preco_venda_final,
+                item_estoque_id=item.id,
+                venda_id=nova_venda.id
+            )
+            db.session.add(transacao_receita)
+
+        elif metodo_pagamento == 'Parcelado':
+            # PARCELADO: Cria as Contas a Receber
+            num_parcelas = int(data.get('num_parcelas', 1))
+            if num_parcelas <= 0: num_parcelas = 1
+
+            valor_parcela = round(preco_venda_final / num_parcelas, 2)
+
+            for i in range(1, num_parcelas + 1):
+                vencimento = datetime.utcnow() + timedelta(days=30 * i)
+                conta = ContaAReceber(
+                    venda_id=nova_venda.id,
+                    valor_parcela_brl=valor_parcela,
+                    data_vencimento=vencimento,
+                    status='Pendente'
+                )
+                db.session.add(conta)
+
         db.session.commit()
         return jsonify(nova_venda.to_dict()), 201
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e)}), 400
@@ -227,10 +222,9 @@ def listar_vendas():
     return jsonify([v.to_dict() for v in vendas])
 
 
-# --- ROTAS FINANCEIRAS (sem mudanças) ---
+# --- ROTAS FINANCEIRAS (ATUALIZADAS) ---
 @app.route('/financeiro/balanco', methods=['GET'])
 def get_balanco_financeiro():
-    # ... (igual)
     try:
         total_receitas = db.session.query(func.sum(Transacao.valor_brl)).filter(
             Transacao.tipo == 'Receita').scalar() or 0.0
@@ -238,10 +232,19 @@ def get_balanco_financeiro():
         balanco_total = total_receitas - total_custos
         total_a_pagar = db.session.query(func.sum(ContaAPagar.valor_brl)).filter(
             ContaAPagar.status == 'Pendente').scalar() or 0.0
+
+        # 4. (NOVO) Calcula o total a receber
+        total_a_receber = db.session.query(func.sum(ContaAReceber.valor_parcela_brl)).filter(
+            ContaAReceber.status == 'Pendente').scalar() or 0.0
+
         return jsonify({
-            'total_receitas_brl': total_receitas, 'total_custos_brl': total_custos,
-            'balanco_total_brl': balanco_total, 'total_a_pagar_brl': total_a_pagar
+            'total_receitas_brl': total_receitas,
+            'total_custos_brl': total_custos,
+            'balanco_total_brl': balanco_total,
+            'total_a_pagar_brl': total_a_pagar,
+            'total_a_receber_brl': total_a_receber  # 5. Adiciona ao balanço
         }), 200
+
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
@@ -352,66 +355,88 @@ def calcular_estimativa():
         return jsonify({'erro': str(e)}), 400
 
 
-# --- 2. NOVA ROTA DE RATEIO DE CUSTO ---
+# --- ROTA DE RATEIO DE CUSTO (sem mudanças) ---
 @app.route('/estoque/alocar-custo', methods=['POST'])
 def alocar_custo_em_lote():
+    # ... (igual)
     data = request.json
     try:
         custo_total_a_alocar = float(data['custo_total_brl'])
         descricao_custo = data['descricao']
         item_ids = data['item_ids']
-        metodo_rateio = data.get('metodo_rateio', 'Peso')  # 'Peso' ou 'Valor'
-
+        metodo_rateio = data.get('metodo_rateio', 'Peso')
         if not item_ids:
             return jsonify({'erro': 'Nenhum item selecionado para rateio.'}), 400
-
-        # 1. Busca os itens selecionados
         itens = ItemEstoque.query.filter(ItemEstoque.id.in_(item_ids)).all()
         if len(itens) != len(item_ids):
             return jsonify({'erro': 'Alguns IDs de itens não foram encontrados.'}), 404
-
-        # 2. Calcula o "Total" (de peso ou valor)
         total_base_rateio = 0.0
         for item in itens:
             if metodo_rateio == 'Valor':
-                total_base_rateio += item.custo_produto_brl  # Usa o custo do produto em BRL
-            else:  # Padrão é 'Peso'
+                total_base_rateio += item.custo_produto_brl
+            else:
                 total_base_rateio += item.peso_kg
-
         if total_base_rateio == 0:
             return jsonify({'erro': 'O total do peso/valor dos itens é zero. Não é possível dividir por zero.'}), 400
-
-        # 3. Aloca o custo para cada item
         for item in itens:
             base_do_item = item.custo_produto_brl if metodo_rateio == 'Valor' else item.peso_kg
             proporcao = base_do_item / total_base_rateio
             custo_alocado_para_o_item = custo_total_a_alocar * proporcao
-
-            # Atualiza o item
             item.custo_adicional_brl += custo_alocado_para_o_item
-
-            # Recalcula o custo total e lucro do item
             calculos = calcular_custos_e_lucro(item.to_dict(), item.produto_catalogo.preco_venda_estimado_brl)
             item.custo_total_brl = calculos['custo_total_brl']
             item.lucro_estimado_brl = calculos['lucro_estimado_brl']
             item.lucro_estimado_percent = calculos['lucro_estimado_percent']
-
-            # Atualiza a transação de Custo original do item
             transacao_item = Transacao.query.filter_by(item_estoque_id=item.id, tipo='Custo').first()
             if transacao_item:
                 transacao_item.valor_brl = item.custo_total_brl
                 transacao_item.descricao = f"Compra de {item.produto_catalogo.nome} (ID Item: {item.id}) + Rateio"
-
-        # 4. Cria UMA transação para o Custo Logístico (Gasolina)
         transacao_logistica = Transacao(
             tipo='Custo',
             descricao=f"Custo logístico: {descricao_custo} (Rateado em {len(itens)} itens)",
             valor_brl=custo_total_a_alocar
         )
         db.session.add(transacao_logistica)
-
         db.session.commit()
         return jsonify({'message': f'Custo de {custo_total_a_alocar} BRL alocado com sucesso em {len(itens)} itens.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': str(e)}), 400
+
+
+# --- 6. NOVAS ROTAS PARA CONTAS A RECEBER ---
+
+@app.route('/contas-a-receber', methods=['GET'])
+def listar_contas_a_receber():
+    # Lista contas pendentes por padrão
+    status_filtro = request.args.get('status', 'Pendente')
+    contas = ContaAReceber.query.filter_by(status=status_filtro).order_by(ContaAReceber.data_vencimento.asc()).all()
+    return jsonify([c.to_dict() for c in contas])
+
+
+@app.route('/contas-a-receber/<int:id>/receber', methods=['POST'])
+def receber_conta(id):
+    conta = ContaAReceber.query.get_or_404(id)
+    if conta.status == 'Pago':
+        return jsonify({'erro': 'Esta conta já foi recebida.'}), 400
+
+    try:
+        # 1. Cria a transação de Receita (Baixa no Caixa)
+        transacao_recebimento = Transacao(
+            tipo='Receita',
+            descricao=f"Recebimento de parcela: {conta.venda.item_vendido.produto_catalogo.nome} (Venda ID: {conta.venda_id})",
+            valor_brl=conta.valor_parcela_brl,
+            venda_id=conta.venda_id
+        )
+        db.session.add(transacao_recebimento)
+        db.session.flush()  # Pega o ID da transação
+
+        # 2. Atualiza o status da conta
+        conta.status = 'Pago'
+        conta.transacao_id = transacao_recebimento.id  # Linka a transação
+
+        db.session.commit()
+        return jsonify(conta.to_dict())
 
     except Exception as e:
         db.session.rollback()

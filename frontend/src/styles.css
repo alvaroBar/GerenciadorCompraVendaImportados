@@ -395,3 +395,31 @@ th {
 .allocator-item-list label:hover {
   background: #f4f4f4;
 }
+
+/* --- Estilos do Painel Financeiro (Adição) --- */
+.metric-item .areceber { color: #17a2b8; }
+
+/* --- Estilos da Lista de Contas a Receber --- */
+.contas-a-receber {
+  margin-top: 40px;
+}
+
+.contas-a-receber .btn-receber {
+  background-color: #28a745;
+  color: white;
+  border-color: #28a745;
+  padding: 4px 8px;
+  font-size: 0.8em;
+}
+
+.contas-a-receber .btn-receber:hover {
+  background-color: #218838;
+}
+
+/* --- Estilos do Modal de Venda --- */
+.parcelado-controls {
+  padding: 10px;
+  background: #f4f4f4;
+  border-radius: 4px;
+  margin-top: 15px;
+}

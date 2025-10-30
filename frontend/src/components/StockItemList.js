@@ -12,7 +12,13 @@ function StockItemList({ api, onDataChanged }) {
   const [currentItem, setCurrentItem] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [openRowId, setOpenRowId] = useState(null);
+
+  // Estados para o Modal de Venda
   const [vendaFinalPrice, setVendaFinalPrice] = useState("");
+  const [metodoPagamento, setMetodoPagamento] = useState("AVista");
+  const [numParcelas, setNumParcelas] = useState(1);
+
+  // --- Definições de Função (Únicas) ---
 
   const loadItems = async () => {
     try {
@@ -25,16 +31,14 @@ function StockItemList({ api, onDataChanged }) {
 
   useEffect(() => {
     loadItems();
-  }, []);
+  }, []); // Roda na montagem
 
   const openModal = (mode, item) => {
     setCurrentItem(item);
     setModalMode(mode);
     if (mode === 'edit') {
       setEditFormData({
-        // 1. ADICIONAR PREÇO DE VENDA AO FORM DE EDIÇÃO
         preco_venda_estimado_brl: item.preco_venda_estimado_brl,
-
         preco_compra_usd: item.preco_compra_usd,
         peso_kg: item.peso_kg,
         iof_percent: item.iof_percent,
@@ -45,6 +49,8 @@ function StockItemList({ api, onDataChanged }) {
     }
     if (mode === 'sell') {
       setVendaFinalPrice(item.preco_venda_estimado_brl.toFixed(2));
+      setMetodoPagamento("AVista");
+      setNumParcelas(1);
     }
     setModalIsOpen(true);
   };
@@ -64,7 +70,6 @@ function StockItemList({ api, onDataChanged }) {
     e.preventDefault();
     if (!currentItem) return;
     try {
-      // 2. Os dados de venda agora são enviados junto
       await api.put(`/estoque/${currentItem.id}`, editFormData);
       closeModal();
       onDataChanged();
@@ -87,10 +92,15 @@ function StockItemList({ api, onDataChanged }) {
   const handleSellSubmit = async (e) => {
     e.preventDefault();
     if (!currentItem) return;
+
+    const dataToSend = {
+      preco_venda_final_brl: parseFloat(vendaFinalPrice),
+      metodo_pagamento: metodoPagamento,
+      num_parcelas: parseInt(numParcelas, 10)
+    };
+
     try {
-      await api.post(`/estoque/${currentItem.id}/vender`, {
-        preco_venda_final_brl: parseFloat(vendaFinalPrice)
-      });
+      await api.post(`/estoque/${currentItem.id}/vender`, dataToSend);
       closeModal();
       onDataChanged();
     } catch (error) {
@@ -147,7 +157,6 @@ function StockItemList({ api, onDataChanged }) {
                   <td>{item.nome_produto} {isRowOpen ? '▲' : '▼'}</td>
                   <td>{formatarData(item.data_cadastro)}</td>
                   <td>R$ {item.custo_total_brl.toFixed(2)}</td>
-                  {/* Esta linha agora exibirá o valor correto */}
                   <td>R$ {item.preco_venda_estimado_brl.toFixed(2)}</td>
                   <td style={{color: item.lucro_estimado_brl < 0 ? 'red' : 'green'}}>
                     R$ {item.lucro_estimado_brl.toFixed(2)}
@@ -216,18 +225,15 @@ function StockItemList({ api, onDataChanged }) {
       >
         <button className="modal-close-button" onClick={closeModal}>&times;</button>
 
-        {/* 3. ATUALIZAR O MODAL DE EDIÇÃO */}
+        {/* Modal de Edição */}
         {modalMode === 'edit' && currentItem && (
           <div>
             <h2>Editar Dados (Item: {currentItem.nome_produto})</h2>
             <form key={currentItem.id} onSubmit={handleEditSubmit}>
-
-              {/* --- 4. NOVO CAMPO DE PREÇO DE VENDA --- */}
               <div className="input-group">
                 <label htmlFor="edit_preco_venda">Preço Venda Estimada (BRL)</label>
                 <input id="edit_preco_venda" name="preco_venda_estimado_brl" type="number" step="0.01" value={editFormData.preco_venda_estimado_brl} onChange={handleEditChange} required />
               </div>
-
               <div className="input-group">
                 <label htmlFor="edit_preco_compra">Preço Compra (USD)</label>
                 <input id="edit_preco_compra" name="preco_compra_usd" type="number" step="0.01" value={editFormData.preco_compra_usd} onChange={handleEditChange} required />
@@ -263,13 +269,14 @@ function StockItemList({ api, onDataChanged }) {
           </div>
         )}
 
-        {/* --- Modais 'Vender' e 'Deletar' (sem mudanças) --- */}
+        {/* Modal de Venda */}
         {modalMode === 'sell' && currentItem && (
           <div>
             <h2>Registrar Venda do Item</h2>
             <p><strong>Produto:</strong> {currentItem.nome_produto} (ID: {currentItem.id})</p>
             <p><strong>Custo Total (BRL):</strong> R$ {currentItem.custo_total_brl.toFixed(2)}</p>
             <p><strong>Venda Estimada (BRL):</strong> R$ {currentItem.preco_venda_estimado_brl.toFixed(2)}</p>
+
             <form onSubmit={handleSellSubmit}>
               <div className="input-group">
                 <label htmlFor="sell_price">Preço de Venda Final (BRL)</label>
@@ -283,6 +290,36 @@ function StockItemList({ api, onDataChanged }) {
                   required
                 />
               </div>
+              <div className="input-group">
+                <label htmlFor="payment_method">Método de Pagamento</label>
+                <select
+                  id="payment_method"
+                  value={metodoPagamento}
+                  onChange={(e) => setMetodoPagamento(e.target.value)}
+                >
+                  <option value="AVista">À Vista (Entra no Caixa)</option>
+                  <option value="Parcelado">Parcelado (Gera Contas a Receber)</option>
+                </select>
+              </div>
+
+              {metodoPagamento === 'Parcelado' && (
+                <div className="parcelado-controls">
+                  <div className="input-group">
+                    <label htmlFor="num_parcelas">Número de Parcelas</label>
+                    <input
+                      id="num_parcelas"
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={numParcelas}
+                      onChange={(e) => setNumParcelas(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <small>As parcelas serão criadas com vencimento de 30, 60, 90... dias.</small>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button type="button" onClick={closeModal}>Cancelar</button>
                 <button type="submit" className="btn-success">Confirmar Venda</button>
@@ -290,6 +327,8 @@ function StockItemList({ api, onDataChanged }) {
             </form>
           </div>
         )}
+
+        {/* Modal de Exclusão */}
         {modalMode === 'delete' && currentItem && (
           <div>
             <h2>Confirmar Exclusão</h2>
