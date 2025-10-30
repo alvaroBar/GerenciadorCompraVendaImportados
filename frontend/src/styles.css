@@ -360,3 +360,38 @@ th {
   display: flex;
   justify-content: space-between;
 }
+
+/* --- Estilos do Rateador de Custo --- */
+.cost-allocator {
+  background: #fffbef;
+  border: 1px solid #ffeeba;
+  border-radius: 8px;
+  padding: 15px 25px;
+  margin-top: 20px;
+}
+
+.allocator-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 15px;
+}
+
+.allocator-item-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  padding: 10px;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.allocator-item-list label {
+  display: block;
+  margin-bottom: 5px;
+  cursor: pointer;
+}
+.allocator-item-list label:hover {
+  background: #f4f4f4;
+}
