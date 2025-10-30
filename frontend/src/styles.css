@@ -456,3 +456,8 @@ th {
   font-weight: bold;
   margin-top: 10px;
 }
+
+/* --- Estilos da Lista de Transações Manuais --- */
+.manual-transactions {
+  margin-top: 20px;
+}

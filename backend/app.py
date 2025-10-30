@@ -44,7 +44,7 @@ def listar_catalogo():
     return jsonify([p.to_dict() for p in produtos])
 
 
-# --- ROTAS DO ESTOQUE (sem mudanças, exceto 'vender_item') ---
+# --- ROTAS DO ESTOQUE (sem mudanças) ---
 @app.route('/estoque', methods=['GET'])
 def listar_estoque():
     # ... (igual)
@@ -54,7 +54,7 @@ def listar_estoque():
 
 @app.route('/estoque', methods=['POST'])
 def adicionar_item_estoque():
-    # ... (igual)
+    # ... (igual, já define is_manual=False por padrão)
     data = request.json
     try:
         nome_produto = data['nome_produto'];
@@ -137,74 +137,47 @@ def deletar_item_estoque(id):
         return jsonify({'erro': str(e)}), 500
 
 
-# --- 1. ROTA DE VENDER (ATUALIZADA) ---
 @app.route('/estoque/<int:id>/vender', methods=['POST'])
 def vender_item(id):
-    item = ItemEstoque.query.get_or_404(id)
+    # ... (igual)
+    item = ItemEstoque.query.get_or_404(id);
     data = request.json
-
-    if item.status == 'Vendido':
-        return jsonify({'erro': 'Este item já foi vendido.'}), 400
-
+    if item.status == 'Vendido': return jsonify({'erro': 'Este item já foi vendido.'}), 400
     try:
-        preco_venda_final = float(data['preco_venda_final_brl'])
+        preco_venda_final = float(data['preco_venda_final_brl']);
         metodo_pagamento = data.get('metodo_pagamento', 'AVista')
-        # Data da Venda vem do frontend, com fallback para 'agora'
         data_venda = datetime.fromisoformat(data.get('data_venda', datetime.utcnow().isoformat()))
-
-        # 1. Atualiza o status do item e cria a Venda
-        item.status = 'Vendido'
+        item.status = 'Vendido';
         lucro_real = preco_venda_final - item.custo_total_brl
-
-        nova_venda = Venda(
-            data_venda=data_venda,  # Salva a data fornecida
-            preco_venda_final_brl=preco_venda_final,
-            lucro_real_brl=lucro_real,
-            item_id=item.id
-        )
-        db.session.add(nova_venda)
+        nova_venda = Venda(data_venda=data_venda, preco_venda_final_brl=preco_venda_final, lucro_real_brl=lucro_real,
+                           item_id=item.id)
+        db.session.add(nova_venda);
         db.session.flush()
-
-        # 2. Lógica de Pagamento
         if metodo_pagamento == 'AVista':
-            # A VISTA: Cria a transação de Receita imediatamente
-            transacao_receita = Transacao(
-                data=data_venda,  # Usa a data da venda
-                tipo='Receita',
-                descricao=f"Venda à vista de {item.produto_catalogo.nome} (Venda ID: {nova_venda.id})",
-                valor_brl=preco_venda_final,
-                item_estoque_id=item.id,
-                venda_id=nova_venda.id
-            )
+            transacao_receita = Transacao(data=data_venda, tipo='Receita',
+                                          descricao=f"Venda à vista de {item.produto_catalogo.nome} (Venda ID: {nova_venda.id})",
+                                          valor_brl=preco_venda_final, item_estoque_id=item.id, venda_id=nova_venda.id)
             db.session.add(transacao_receita)
-
         elif metodo_pagamento == 'Parcelado':
-            # PARCELADO: Cria as Contas a Receber a partir do array 'parcelas'
-            parcelas = data.get('parcelas', [])
-            if not parcelas:
-                raise Exception("Venda parcelada não contém parcelas.")
-
+            parcelas = data.get('parcelas', []);
+            if not parcelas: raise Exception("Venda parcelada não contém parcelas.")
             for p in parcelas:
-                conta = ContaAReceber(
-                    venda_id=nova_venda.id,
-                    descricao=p.get('descricao', f'Parcela Venda {nova_venda.id}'),
-                    valor_parcela_brl=float(p['valor']),
-                    data_vencimento=datetime.fromisoformat(p['data']),
-                    status='Pendente'
-                )
+                conta = ContaAReceber(venda_id=nova_venda.id,
+                                      descricao=p.get('descricao', f'Parcela Venda {nova_venda.id}'),
+                                      valor_parcela_brl=float(p['valor']),
+                                      data_vencimento=datetime.fromisoformat(p['data']), status='Pendente')
                 db.session.add(conta)
-
-        db.session.commit()
+        db.session.commit();
         return jsonify(nova_venda.to_dict()), 201
-
     except Exception as e:
-        db.session.rollback()
+        db.session.rollback();
         return jsonify({'erro': str(e)}), 400
 
 
 # --- ROTAS DE VENDAS (sem mudanças) ---
 @app.route('/vendas', methods=['GET'])
 def listar_vendas():
+    # ... (igual)
     vendas = Venda.query.order_by(Venda.data_venda.desc()).all()
     return jsonify([v.to_dict() for v in vendas])
 
@@ -222,52 +195,96 @@ def get_balanco_financeiro():
             ContaAPagar.status == 'Pendente').scalar() or 0.0
         total_a_receber = db.session.query(func.sum(ContaAReceber.valor_parcela_brl)).filter(
             ContaAReceber.status == 'Pendente').scalar() or 0.0
-        return jsonify({
-            'total_receitas_brl': total_receitas, 'total_custos_brl': total_custos,
-            'balanco_total_brl': balanco_total, 'total_a_pagar_brl': total_a_pagar,
-            'total_a_receber_brl': total_a_receber
-        }), 200
+        return jsonify(
+            {'total_receitas_brl': total_receitas, 'total_custos_brl': total_custos, 'balanco_total_brl': balanco_total,
+             'total_a_pagar_brl': total_a_pagar, 'total_a_receber_brl': total_a_receber}), 200
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
 
+# --- 2. ATUALIZAR 'transacao-manual' ---
 @app.route('/financeiro/transacao-manual', methods=['POST'])
 def adicionar_transacao_manual():
-    # ... (igual)
     data = request.json
     try:
-        tipo = data['tipo'];
-        if tipo not in ['Receita', 'Custo']: return jsonify({'erro': "Tipo deve ser 'Receita' ou 'Custo'"}), 400
-        transacao = Transacao(tipo=tipo, descricao=data['descricao'], valor_brl=float(data['valor_brl']))
-        db.session.add(transacao);
+        tipo = data['tipo']
+        if tipo not in ['Receita', 'Custo']:
+            return jsonify({'erro': "Tipo deve ser 'Receita' ou 'Custo'"}), 400
+
+        transacao = Transacao(
+            tipo=tipo,
+            descricao=data['descricao'],
+            valor_brl=float(data['valor_brl']),
+            data=datetime.fromisoformat(data['data']),  # Data manual
+            is_manual=True  # <-- SINALIZADOR
+        )
+        db.session.add(transacao)
         db.session.commit()
         return jsonify(transacao.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': str(e)}), 400
+
+
+# --- 3. NOVAS ROTAS CRUD PARA TRANSAÇÕES MANUAIS ---
+@app.route('/financeiro/transacoes-manuais', methods=['GET'])
+def listar_transacoes_manuais():
+    # Retorna apenas transações com a flag is_manual=True
+    transacoes = Transacao.query.filter_by(is_manual=True).order_by(Transacao.data.desc()).all()
+    return jsonify([t.to_dict() for t in transacoes])
+
+
+@app.route('/financeiro/transacao-manual/<int:id>', methods=['PUT'])
+def atualizar_transacao_manual(id):
+    transacao = Transacao.query.get_or_404(id)
+    if not transacao.is_manual:
+        return jsonify({'erro': 'Não é permitido editar uma transação automática.'}), 403
+
+    data = request.json
+    try:
+        transacao.tipo = data.get('tipo', transacao.tipo)
+        transacao.descricao = data.get('descricao', transacao.descricao)
+        transacao.valor_brl = float(data.get('valor_brl', transacao.valor_brl))
+        transacao.data = datetime.fromisoformat(data.get('data', transacao.data.isoformat()))
+        db.session.commit()
+        return jsonify(transacao.to_dict())
     except Exception as e:
         db.session.rollback();
         return jsonify({'erro': str(e)}), 400
 
 
-# --- 2. ROTAS CONTAS A PAGAR (ATUALIZADAS COM CRUD) ---
+@app.route('/financeiro/transacao-manual/<int:id>', methods=['DELETE'])
+def deletar_transacao_manual(id):
+    transacao = Transacao.query.get_or_404(id)
+    if not transacao.is_manual:
+        return jsonify({'erro': 'Não é permitido excluir uma transação automática.'}), 403
 
+    try:
+        db.session.delete(transacao)
+        db.session.commit()
+        return jsonify({'message': 'Transação manual removida com sucesso'})
+    except Exception as e:
+        db.session.rollback();
+        return jsonify({'erro': str(e)}), 500
+
+
+# --- ROTAS CONTAS A PAGAR (sem mudanças) ---
+# ... (igual)
 @app.route('/contas-a-pagar', methods=['GET'])
 def listar_contas_a_pagar():
-    # ... (igual)
-    status_filtro = request.args.get('status', 'Pendente')
-    contas = ContaAPagar.query.filter_by(status=status_filtro).order_by(ContaAPagar.data_vencimento.asc()).all()
+    status_filtro = request.args.get('status', 'Pendente');
+    contas = ContaAPagar.query.filter_by(status=status_filtro).order_by(ContaAPagar.data_vencimento.asc()).all();
     return jsonify([c.to_dict() for c in contas])
 
 
 @app.route('/contas-a-pagar', methods=['POST'])
 def adicionar_conta_a_pagar():
-    # ... (igual)
     data = request.json
     try:
-        nova_conta = ContaAPagar(
-            descricao=data['descricao'], valor_brl=float(data['valor_brl']),
-            data_vencimento=datetime.fromisoformat(data['data_vencimento'])
-        )
+        nova_conta = ContaAPagar(descricao=data['descricao'], valor_brl=float(data['valor_brl']),
+                                 data_vencimento=datetime.fromisoformat(data['data_vencimento']));
         db.session.add(nova_conta);
-        db.session.commit()
+        db.session.commit();
         return jsonify(nova_conta.to_dict()), 201
     except Exception as e:
         db.session.rollback();
@@ -276,19 +293,16 @@ def adicionar_conta_a_pagar():
 
 @app.route('/contas-a-pagar/<int:id>/pagar', methods=['POST'])
 def pagar_conta(id):
-    # ... (igual)
     conta = ContaAPagar.query.get_or_404(id)
     if conta.status == 'Pago': return jsonify({'erro': 'Esta conta já foi paga.'}), 400
     try:
-        transacao_pagamento = Transacao(
-            tipo='Custo',
-            descricao=f"Pagamento de conta: {conta.descricao} (ID Conta: {conta.id})",
-            valor_brl=conta.valor_brl
-        )
+        transacao_pagamento = Transacao(tipo='Custo',
+                                        descricao=f"Pagamento de conta: {conta.descricao} (ID Conta: {conta.id})",
+                                        valor_brl=conta.valor_brl);
         db.session.add(transacao_pagamento);
         db.session.flush()
         conta.status = 'Pago';
-        conta.transacao_id = transacao_pagamento.id
+        conta.transacao_id = transacao_pagamento.id;
         db.session.commit()
         return jsonify(conta.to_dict())
     except Exception as e:
@@ -299,14 +313,13 @@ def pagar_conta(id):
 @app.route('/contas-a-pagar/<int:id>', methods=['PUT'])
 def atualizar_conta_a_pagar(id):
     conta = ContaAPagar.query.get_or_404(id)
-    if conta.status == 'Pago':
-        return jsonify({'erro': 'Não é possível editar uma conta que já foi paga.'}), 400
+    if conta.status == 'Pago': return jsonify({'erro': 'Não é possível editar uma conta que já foi paga.'}), 400
     data = request.json
     try:
-        conta.descricao = data.get('descricao', conta.descricao)
-        conta.valor_brl = float(data.get('valor_brl', conta.valor_brl))
-        conta.data_vencimento = datetime.fromisoformat(data.get('data_vencimento', conta.data_vencimento.isoformat()))
-        db.session.commit()
+        conta.descricao = data.get('descricao', conta.descricao);
+        conta.valor_brl = float(data.get('valor_brl', conta.valor_brl));
+        conta.data_vencimento = datetime.fromisoformat(data.get('data_vencimento', conta.data_vencimento.isoformat()));
+        db.session.commit();
         return jsonify(conta.to_dict())
     except Exception as e:
         db.session.rollback();
@@ -316,10 +329,9 @@ def atualizar_conta_a_pagar(id):
 @app.route('/contas-a-pagar/<int:id>', methods=['DELETE'])
 def deletar_conta_a_pagar(id):
     conta = ContaAPagar.query.get_or_404(id)
-    if conta.status == 'Pago':
-        return jsonify({'erro': 'Não é possível excluir uma conta que já foi paga.'}), 400
+    if conta.status == 'Pago': return jsonify({'erro': 'Não é possível excluir uma conta que já foi paga.'}), 400
     try:
-        db.session.delete(conta)
+        db.session.delete(conta);
         db.session.commit()
         return jsonify({'message': 'Conta a pagar removida com sucesso'})
     except Exception as e:
@@ -327,31 +339,27 @@ def deletar_conta_a_pagar(id):
         return jsonify({'erro': str(e)}), 500
 
 
-# --- 3. ROTAS CONTAS A RECEBER (ATUALIZADAS COM CRUD) ---
-
+# --- ROTAS CONTAS A RECEBER (sem mudanças) ---
+# ... (igual)
 @app.route('/contas-a-receber', methods=['GET'])
 def listar_contas_a_receber():
-    # ... (igual)
-    status_filtro = request.args.get('status', 'Pendente')
-    contas = ContaAReceber.query.filter_by(status=status_filtro).order_by(ContaAReceber.data_vencimento.asc()).all()
+    status_filtro = request.args.get('status', 'Pendente');
+    contas = ContaAReceber.query.filter_by(status=status_filtro).order_by(ContaAReceber.data_vencimento.asc()).all();
     return jsonify([c.to_dict() for c in contas])
 
 
 @app.route('/contas-a-receber/<int:id>/receber', methods=['POST'])
 def receber_conta(id):
-    # ... (igual)
     conta = ContaAReceber.query.get_or_404(id)
     if conta.status == 'Pago': return jsonify({'erro': 'Esta conta já foi recebida.'}), 400
     try:
-        transacao_recebimento = Transacao(
-            tipo='Receita',
-            descricao=f"Recebimento de parcela: {conta.venda.item_vendido.produto_catalogo.nome} (Venda ID: {conta.venda_id})",
-            valor_brl=conta.valor_parcela_brl
-        )
+        transacao_recebimento = Transacao(tipo='Receita',
+                                          descricao=f"Recebimento de parcela: {conta.venda.item_vendido.produto_catalogo.nome} (Venda ID: {conta.venda_id})",
+                                          valor_brl=conta.valor_parcela_brl);
         db.session.add(transacao_recebimento);
         db.session.flush()
         conta.status = 'Pago';
-        conta.transacao_id = transacao_recebimento.id
+        conta.transacao_id = transacao_recebimento.id;
         db.session.commit()
         return jsonify(conta.to_dict())
     except Exception as e:
@@ -362,14 +370,13 @@ def receber_conta(id):
 @app.route('/contas-a-receber/<int:id>', methods=['PUT'])
 def atualizar_conta_a_receber(id):
     conta = ContaAReceber.query.get_or_404(id)
-    if conta.status == 'Pago':
-        return jsonify({'erro': 'Não é possível editar uma conta que já foi recebida.'}), 400
+    if conta.status == 'Pago': return jsonify({'erro': 'Não é possível editar uma conta que já foi recebida.'}), 400
     data = request.json
     try:
-        conta.descricao = data.get('descricao', conta.descricao)
-        conta.valor_parcela_brl = float(data.get('valor_parcela_brl', conta.valor_parcela_brl))
-        conta.data_vencimento = datetime.fromisoformat(data.get('data_vencimento', conta.data_vencimento.isoformat()))
-        db.session.commit()
+        conta.descricao = data.get('descricao', conta.descricao);
+        conta.valor_parcela_brl = float(data.get('valor_parcela_brl', conta.valor_parcela_brl));
+        conta.data_vencimento = datetime.fromisoformat(data.get('data_vencimento', conta.data_vencimento.isoformat()));
+        db.session.commit();
         return jsonify(conta.to_dict())
     except Exception as e:
         db.session.rollback();
@@ -379,15 +386,14 @@ def atualizar_conta_a_receber(id):
 @app.route('/contas-a-receber/<int:id>', methods=['DELETE'])
 def deletar_conta_a_receber(id):
     conta = ContaAReceber.query.get_or_404(id)
-    if conta.status == 'Pago':
-        return jsonify({'erro': 'Não é possível excluir uma conta que já foi recebida.'}), 400
+    if conta.status == 'Pago': return jsonify({'erro': 'Não é possível excluir uma conta que já foi recebida.'}), 400
     try:
-        db.session.delete(conta)
+        db.session.delete(conta);
         db.session.commit()
         return jsonify({'message': 'Conta a receber removida com sucesso'})
     except Exception as e:
         db.session.rollback();
-        return jsonify({'erro': str(e)}), 400
+        return jsonify({'erro': str(e)}), 500
 
 
 # --- ROTA DE ESTIMATIVA (sem mudanças) ---
