@@ -1,7 +1,13 @@
+// frontend/src/App.js
 import React, { useState } from "react";
-import ProductForm from "./components/ProductForm";
-import ProductList from "./components/ProductList";
+import StockItemForm from "./components/StockItemForm";
+import StockItemList from "./components/StockItemList";
 import SettingsForm from "./components/SettingsForm";
+import SalesHistory from "./components/SalesHistory";
+import FinancialDashboard from "./components/FinancialDashboard";
+import FinancialForms from "./components/FinancialForms";
+import ContasAPagar from "./components/ContasAPagar";
+import EstimationModule from "./components/EstimationModule"; // 1. Importar
 import api from "./api";
 
 function App() {
@@ -13,7 +19,6 @@ function App() {
     shipping_method: "Air"
   });
 
-  // Esta função agora serve para CADA mudança nos dados
   const handleDataChanged = () => {
     setRefreshKey((prevKey) => prevKey + 1);
   };
@@ -22,23 +27,49 @@ function App() {
     <div className="App">
       <h1>Gerenciador de Compra e Venda de Acessórios Musicais</h1>
 
+      <FinancialDashboard
+        api={api}
+        key={refreshKey - 1}
+      />
+
+      <FinancialForms
+        api={api}
+        onDataChanged={handleDataChanged}
+      />
+
       <SettingsForm
         settings={globalSettings}
         onSettingsChange={setGlobalSettings}
       />
 
-      {/* Passa handleDataChanged para o formulário */}
-      <ProductForm
+      {/* 2. Adicionar o novo Módulo de Estimativa */}
+      {/* Ele usa as 'globalSettings', então o colocamos aqui */}
+      <EstimationModule
         api={api}
-        onProductSaved={handleDataChanged}
         globalSettings={globalSettings}
       />
 
-      {/* Passa handleDataChanged E a key para a lista */}
-      <ProductList
+      <StockItemForm
+        api={api}
+        onItemAdded={handleDataChanged}
+        globalSettings={globalSettings}
+      />
+
+      <ContasAPagar
+        api={api}
+        key={refreshKey + 2}
+        onDataChanged={handleDataChanged}
+      />
+
+      <StockItemList
         api={api}
         key={refreshKey}
         onDataChanged={handleDataChanged}
+      />
+
+      <SalesHistory
+        api={api}
+        key={refreshKey + 1}
       />
     </div>
   );
