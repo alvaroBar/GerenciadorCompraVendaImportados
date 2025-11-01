@@ -128,7 +128,7 @@ function FinancialForms({ api, onDataChanged }) {
           <p>Registre receitas futuras (Salário, Venda antiga). Irá para "A Receber".</p>
           <div className="input-group">
             <label>Descrição</label>
-            <input name="descricao" value={contaReceberForm.descricao} onChange={handleReceberChange} required placeholder="Ex: Salário sabio" />
+            <input name="descricao" value={contaReceberForm.descricao} onChange={handleReceberChange} required placeholder="Ex: Saldo Salário" />
           </div>
           <div className="input-group">
             <label>Valor (R$)</label>

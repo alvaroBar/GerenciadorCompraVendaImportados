@@ -483,3 +483,41 @@ th {
 .action-buttons .btn-reverter:hover {
   background-color: #5a6268;
 }
+
+/* --- Estilos do Gerenciador de Backup --- */
+.backup-manager {
+  background: #fdf8e3; /* Amarelo bem claro de aviso */
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 15px 25px;
+  margin-top: 20px;
+}
+
+.backup-manager h2 {
+  margin-top: 0;
+  color: #856404; /* Amarelo escuro */
+}
+
+.backup-manager .backup-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.backup-manager .btn-download {
+  display: inline-block;
+  text-decoration: none;
+  padding: 9px 15px;
+  cursor: pointer;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.backup-manager .btn-download:hover {
+  background: #0056b3;
+}

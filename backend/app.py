@@ -8,6 +8,8 @@ from datetime import datetime, UTC
 from models import ProdutoCatalogo, ItemEstoque, Venda, Transacao, ContaAPagar, ContaAReceber, LoteDeCusto, \
     AlocacaoCustoItem
 from flask_migrate import Migrate
+import os
+from flask import send_from_directory
 
 app = Flask(__name__)
 CORS(app)
@@ -562,6 +564,38 @@ def deletar_lote_de_custo(id):
     except Exception as e:
         db.session.rollback();
         return jsonify({'erro': str(e)}), 400
+
+@app.route('/admin/download-db', methods=['GET'])
+def download_database():
+    try:
+        # app.instance_path aponta para a pasta 'instance/'
+        return send_from_directory(app.instance_path, 'produtos.db', as_attachment=True)
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/admin/upload-db', methods=['POST'])
+def upload_database():
+    if 'file' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'erro': 'Nome de arquivo vazio.'}), 400
+
+    # Salva o arquivo com um nome temporário e seguro
+    save_path = os.path.join(app.instance_path, 'produtos_UPLOAD.db')
+
+    try:
+        file.save(save_path)
+        # AVISO IMPORTANTE para o usuário
+        return jsonify({
+            'message': 'Backup recebido com sucesso! '
+                       'AVISO: Para restaurar, você DEVE parar o servidor Flask, '
+                       'deletar o arquivo \'produtos.db\' e renomear \'produtos_UPLOAD.db\' para \'produtos.db\'.'
+        }), 200
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
 
 
 # --- Ponto de Partida ---
