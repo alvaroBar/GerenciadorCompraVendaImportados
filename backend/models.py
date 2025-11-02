@@ -1,6 +1,6 @@
 # backend/models.py
 from database import db
-from datetime import datetime
+from datetime import datetime, UTC  # Importar UTC
 from sqlalchemy.orm import column_property
 from sqlalchemy.sql import select, func
 
@@ -18,66 +18,52 @@ class ProdutoCatalogo(db.Model):
 
 class ItemEstoque(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # 1. MUDANÇA: 'data_cadastro' é o registro. 'data_compra' é a data real.
+    data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.now(UTC))
+    data_compra = db.Column(db.DateTime, nullable=False, default=datetime.now(UTC))  # <-- NOVO CAMPO
+
     status = db.Column(db.String(50), nullable=False, default='Em Estoque')
     produto_catalogo_id = db.Column(db.Integer, db.ForeignKey('produto_catalogo.id'), nullable=False)
-
-    # --- Dados da Compra ---
-    preco_compra_usd = db.Column(db.Float, nullable=False)
-    peso_kg = db.Column(db.Float, nullable=False)
-    iof_percent = db.Column(db.Float, nullable=False)
-    taxa_dolar = db.Column(db.Float, nullable=False)
-    shipping_method = db.Column(db.String(50), nullable=False, default='Air')
-
-    # --- Custos Primários (Salvos) ---
-    custo_produto_brl = db.Column(db.Float, nullable=False)
-    custo_iof_brl = db.Column(db.Float, nullable=False)
-    custo_frete_brl = db.Column(db.Float, nullable=False)
-
-    # --- 1. MUDANÇA: Custo Adicional (REMOVIDO) ---
-    # custo_adicional_brl = db.Column(db.Float, nullable=False, default=0.0)
-
-    # Relação com as alocações (calcula o custo adicional dinamicamente)
+    preco_compra_usd = db.Column(db.Float, nullable=False);
+    peso_kg = db.Column(db.Float, nullable=False);
+    iof_percent = db.Column(db.Float, nullable=False);
+    taxa_dolar = db.Column(db.Float, nullable=False);
+    shipping_method = db.Column(db.String(50), nullable=False, default='Air');
+    custo_produto_brl = db.Column(db.Float, nullable=False);
+    custo_iof_brl = db.Column(db.Float, nullable=False);
+    custo_frete_brl = db.Column(db.Float, nullable=False);
+    custo_total_brl = db.Column(db.Float, nullable=False);
+    lucro_estimado_brl = db.Column(db.Float, nullable=False);
+    lucro_estimado_percent = db.Column(db.Float, nullable=False)
     alocacoes = db.relationship('AlocacaoCustoItem', backref='item_estoque', lazy='dynamic',
                                 cascade='all, delete-orphan')
 
-    # --- Custos Totais e Lucro (Salvos) ---
-    # Estes serão atualizados por gatilhos da API quando um Lote for alterado
-    custo_total_brl = db.Column(db.Float, nullable=False)
-    lucro_estimado_brl = db.Column(db.Float, nullable=False)
-    lucro_estimado_percent = db.Column(db.Float, nullable=False)
-
     def get_custo_adicional_total(self):
-        # Soma todas as alocações deste item
-        total_adicional = db.session.query(func.sum(AlocacaoCustoItem.valor_alocado_brl)) \
-                              .filter(AlocacaoCustoItem.item_estoque_id == self.id).scalar() or 0.0
+        total_adicional = db.session.query(func.sum(AlocacaoCustoItem.valor_alocado_brl)).filter(
+            AlocacaoCustoItem.item_estoque_id == self.id).scalar() or 0.0
         return total_adicional
 
     def to_dict(self):
         produto_info = self.produto_catalogo
         custo_adicional = self.get_custo_adicional_total()
-
         return {
-            'id': self.id, 'status': self.status, 'data_cadastro': self.data_cadastro.isoformat(),
+            'id': self.id, 'status': self.status,
+            'data_cadastro': self.data_cadastro.isoformat(),
+            'data_compra': self.data_compra.isoformat().split('T')[0],  # <-- 2. ENVIAR DATA (AAAA-MM-DD)
             'produto_catalogo_id': produto_info.id, 'nome_produto': produto_info.nome,
             'preco_venda_estimado_brl': produto_info.preco_venda_estimado_brl,
             'preco_compra_usd': self.preco_compra_usd, 'peso_kg': self.peso_kg,
             'iof_percent': self.iof_percent, 'taxa_dolar': self.taxa_dolar,
-            'shipping_method': self.shipping_method,
-            'custo_produto_brl': self.custo_produto_brl,
-            'custo_iof_brl': self.custo_iof_brl,
-            'custo_frete_brl': self.custo_frete_brl,
-            'custo_adicional_brl': custo_adicional,  # 2. Agora é calculado
-            'custo_total_brl': self.custo_total_brl,
-            'lucro_estimado_brl': self.lucro_estimado_brl,
-            'lucro_estimado_percent': self.lucro_estimado_percent,
-            # 3. Envia os IDs dos lotes para o frontend
+            'shipping_method': self.shipping_method, 'custo_produto_brl': self.custo_produto_brl,
+            'custo_iof_brl': self.custo_iof_brl, 'custo_frete_brl': self.custo_frete_brl,
+            'custo_adicional_brl': custo_adicional, 'custo_total_brl': self.custo_total_brl,
+            'lucro_estimado_brl': self.lucro_estimado_brl, 'lucro_estimado_percent': self.lucro_estimado_percent,
             'lote_ids': [a.lote_id for a in self.alocacoes]
         }
 
 
+# ... (Modelos Venda, Transacao, ContaAPagar, ContaAReceber, LoteDeCusto, AlocacaoCustoItem - sem mudanças) ...
 class Venda(db.Model):
-    # ... (sem mudanças)
     id = db.Column(db.Integer, primary_key=True);
     data_venda = db.Column(db.DateTime, nullable=False);
     preco_venda_final_brl = db.Column(db.Float, nullable=False);
@@ -86,18 +72,18 @@ class Venda(db.Model):
     item_vendido = db.relationship('ItemEstoque', backref=db.backref('venda', uselist=False));
     contas_a_receber = db.relationship('ContaAReceber', backref='venda', lazy=True)
 
-    def to_dict(self):
-        item_info = self.item_vendido
-        return {'id_venda': self.id, 'data_venda': self.data_venda.isoformat(),
-                'preco_venda_final_brl': self.preco_venda_final_brl, 'lucro_real_brl': self.lucro_real_brl,
-                'item_id': item_info.id, 'nome_produto': item_info.produto_catalogo.nome,
-                'custo_total_brl': item_info.custo_total_brl}
+    def to_dict(self): item_info = self.item_vendido; return {'id_venda': self.id,
+                                                              'data_venda': self.data_venda.isoformat(),
+                                                              'preco_venda_final_brl': self.preco_venda_final_brl,
+                                                              'lucro_real_brl': self.lucro_real_brl,
+                                                              'item_id': item_info.id,
+                                                              'nome_produto': item_info.produto_catalogo.nome,
+                                                              'custo_total_brl': item_info.custo_total_brl}
 
 
 class Transacao(db.Model):
-    # ... (sem mudanças)
     id = db.Column(db.Integer, primary_key=True);
-    data = db.Column(db.DateTime, nullable=False, default=datetime.utcnow);
+    data = db.Column(db.DateTime, nullable=False, default=datetime.now(UTC));
     tipo = db.Column(db.String(50), nullable=False);
     descricao = db.Column(db.String(200), nullable=False);
     valor_brl = db.Column(db.Float, nullable=False);
@@ -105,13 +91,11 @@ class Transacao(db.Model):
     venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True);
     is_manual = db.Column(db.Boolean, nullable=False, default=False)
 
-    def to_dict(self):
-        return {'id': self.id, 'data': self.data.isoformat().split('T')[0], 'tipo': self.tipo,
-                'descricao': self.descricao, 'valor_brl': self.valor_brl, 'is_manual': self.is_manual}
+    def to_dict(self): return {'id': self.id, 'data': self.data.isoformat().split('T')[0], 'tipo': self.tipo,
+                               'descricao': self.descricao, 'valor_brl': self.valor_brl, 'is_manual': self.is_manual}
 
 
 class ContaAPagar(db.Model):
-    # ... (sem mudanças)
     id = db.Column(db.Integer, primary_key=True);
     descricao = db.Column(db.String(200), nullable=False);
     valor_brl = db.Column(db.Float, nullable=False);
@@ -119,14 +103,12 @@ class ContaAPagar(db.Model):
     status = db.Column(db.String(50), nullable=False, default='Pendente');
     transacao_id = db.Column(db.Integer, db.ForeignKey('transacao.id'), nullable=True)
 
-    def to_dict(self):
-        return {'id': self.id, 'descricao': self.descricao, 'valor_brl': self.valor_brl,
-                'data_vencimento': self.data_vencimento.isoformat().split('T')[0], 'status': self.status,
-                'transacao_id': self.transacao_id}
+    def to_dict(self): return {'id': self.id, 'descricao': self.descricao, 'valor_brl': self.valor_brl,
+                               'data_vencimento': self.data_vencimento.isoformat().split('T')[0], 'status': self.status,
+                               'transacao_id': self.transacao_id}
 
 
 class ContaAReceber(db.Model):
-    # ... (sem mudanças)
     id = db.Column(db.Integer, primary_key=True);
     venda_id = db.Column(db.Integer, db.ForeignKey('venda.id'), nullable=True);
     descricao = db.Column(db.String(200), nullable=False);
@@ -135,40 +117,28 @@ class ContaAReceber(db.Model):
     status = db.Column(db.String(50), nullable=False, default='Pendente');
     transacao_id = db.Column(db.Integer, db.ForeignKey('transacao.id'), nullable=True)
 
-    def to_dict(self):
-        return {'id': self.id, 'venda_id': self.venda_id,
-                'nome_produto': self.venda.item_vendido.produto_catalogo.nome if self.venda else 'N/A (Avulso)',
-                'descricao': self.descricao, 'valor_parcela_brl': self.valor_parcela_brl,
-                'data_vencimento': self.data_vencimento.isoformat().split('T')[0], 'status': self.status,
-                'transacao_id': self.transacao_id}
+    def to_dict(self): return {'id': self.id, 'venda_id': self.venda_id,
+                               'nome_produto': self.venda.item_vendido.produto_catalogo.nome if self.venda else 'N/A (Avulso)',
+                               'descricao': self.descricao, 'valor_parcela_brl': self.valor_parcela_brl,
+                               'data_vencimento': self.data_vencimento.isoformat().split('T')[0], 'status': self.status,
+                               'transacao_id': self.transacao_id}
 
 
-# --- 4. NOVOS MODELOS ---
 class LoteDeCusto(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    descricao = db.Column(db.String(200), nullable=False)
-    valor_total_brl = db.Column(db.Float, nullable=False)
-    metodo_rateio = db.Column(db.String(50), nullable=False, default='Peso')  # Peso, Valor
-    # O Lote de Custo *é* uma Conta a Pagar
-    conta_a_pagar_id = db.Column(db.Integer, db.ForeignKey('conta_a_pagar.id'), nullable=False, unique=True)
-
-    # Relação com as alocações
+    id = db.Column(db.Integer, primary_key=True);
+    descricao = db.Column(db.String(200), nullable=False);
+    valor_total_brl = db.Column(db.Float, nullable=False);
+    metodo_rateio = db.Column(db.String(50), nullable=False, default='Peso');
+    conta_a_pagar_id = db.Column(db.Integer, db.ForeignKey('conta_a_pagar.id'), nullable=False, unique=True);
     alocacoes = db.relationship('AlocacaoCustoItem', backref='lote', lazy='dynamic', cascade='all, delete-orphan')
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'descricao': self.descricao,
-            'valor_total_brl': self.valor_total_brl,
-            'metodo_rateio': self.metodo_rateio,
-            'conta_a_pagar_id': self.conta_a_pagar_id,
-            # Envia os IDs dos itens que estão neste lote
-            'item_ids': [a.item_estoque_id for a in self.alocacoes]
-        }
+    def to_dict(self): return {'id': self.id, 'descricao': self.descricao, 'valor_total_brl': self.valor_total_brl,
+                               'metodo_rateio': self.metodo_rateio, 'conta_a_pagar_id': self.conta_a_pagar_id,
+                               'item_ids': [a.item_estoque_id for a in self.alocacoes]}
 
 
 class AlocacaoCustoItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey('lote_de_custo.id'), nullable=False)
-    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=False)
+    id = db.Column(db.Integer, primary_key=True);
+    lote_id = db.Column(db.Integer, db.ForeignKey('lote_de_custo.id'), nullable=False);
+    item_estoque_id = db.Column(db.Integer, db.ForeignKey('item_estoque.id'), nullable=False);
     valor_alocado_brl = db.Column(db.Float, nullable=False)

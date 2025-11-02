@@ -13,21 +13,12 @@ function StockItemList({ api, onDataChanged }) {
   const [currentItem, setCurrentItem] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [openRowId, setOpenRowId] = useState(null);
-
-  const [vendaForm, setVendaForm] = useState({
-    data_venda: getTodayDate(),
-    preco_venda_final_brl: "",
-    metodo_pagamento: "AVista",
-  });
-
+  const [vendaForm, setVendaForm] = useState({ data_venda: getTodayDate(), preco_venda_final_brl: "", metodo_pagamento: "AVista" });
   const [parcelas, setParcelas] = useState([]);
-  const [parcelaForm, setParcelaForm] = useState({
-    descricao: "",
-    valor: "",
-    data: ""
-  });
+  const [parcelaForm, setParcelaForm] = useState({ descricao: "", valor: "", data: "" });
+  const [loadingRate, setLoadingRate] = useState(false);
 
-  // --- Funções (sem mudanças) ---
+  // --- Funções (Corrigidas e sem duplicatas) ---
 
   const loadItems = async () => {
     try {
@@ -48,12 +39,13 @@ function StockItemList({ api, onDataChanged }) {
     if (mode === 'edit') {
       setEditFormData({
         preco_venda_estimado_brl: item.preco_venda_estimado_brl,
+        data_compra: item.data_compra, // Data da compra
         preco_compra_usd: item.preco_compra_usd,
         peso_kg: item.peso_kg,
         iof_percent: item.iof_percent,
         taxa_dolar: item.taxa_dolar,
         shipping_method: item.shipping_method,
-        custo_adicional_brl: item.custo_adicional_brl
+        // Custo adicional não é editável aqui
       });
     }
     if (mode === 'sell') {
@@ -75,6 +67,7 @@ function StockItemList({ api, onDataChanged }) {
     setVendaForm({data_venda: getTodayDate(), preco_venda_final_brl: "", metodo_pagamento: "AVista"});
     setParcelas([]);
     setParcelaForm({ descricao: "", valor: "", data: "" });
+    setLoadingRate(false);
   };
 
   const handleEditChange = (e) => {
@@ -164,6 +157,7 @@ function StockItemList({ api, onDataChanged }) {
   const formatarData = (isoString) => {
     if (!isoString) return 'N/A';
     const date = new Date(isoString);
+    // Corrige fuso horário para exibição de datas AAAA-MM-DD
     if(isoString.length === 10) {
         date.setDate(date.getDate() + 1);
     }
@@ -188,7 +182,21 @@ function StockItemList({ api, onDataChanged }) {
     };
   };
 
-  // --- 1. FUNÇÃO DE FORMATAÇÃO E CÁLCULOS TOTAIS ---
+  // Função para buscar cotação DENTRO do modal
+  const fetchRateForModal = async (date) => {
+    if (!date) return;
+    try {
+      setLoadingRate(true);
+      const response = await api.get(`/api/get-exchange-rate?date=${date}`);
+      setEditFormData(f => ({ ...f, taxa_dolar: response.data.rate.toFixed(4) }));
+    } catch (error) {
+      console.error("Erro ao buscar cotação:", error);
+      alert("Não foi possível buscar a cotação. Verifique a data.");
+    } finally {
+      setLoadingRate(false);
+    }
+  };
+
   const formatBRL = (value) => `R$ ${value.toFixed(2)}`;
 
   const totalCusto = stockItems.reduce(
@@ -224,7 +232,7 @@ function StockItemList({ api, onDataChanged }) {
               <Fragment key={item.id}>
                 <tr className="product-row" onClick={() => handleRowClick(item.id)}>
                   <td>{item.nome_produto} {isRowOpen ? '▲' : '▼'}</td>
-                  <td>{formatarData(item.data_cadastro)}</td>
+                  <td>{formatarData(item.data_compra)}</td>
                   <td>{formatBRL(item.custo_total_brl)}</td>
                   <td>{formatBRL(item.preco_venda_estimado_brl)}</td>
                   <td style={{color: item.lucro_estimado_brl < 0 ? 'red' : 'green'}}>
@@ -283,7 +291,6 @@ function StockItemList({ api, onDataChanged }) {
           })}
         </tbody>
 
-        {/* --- 3. NOVO RODAPÉ COM OS TOTAIS --- */}
         <tfoot>
           <tr style={{borderTop: '2px solid #333'}}>
             <td colSpan="2" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
@@ -298,14 +305,13 @@ function StockItemList({ api, onDataChanged }) {
             <td style={{ fontWeight: 'bold', fontSize: '1.1em', color: totalLucroEstimado < 0 ? 'red' : 'green' }}>
               {formatBRL(totalLucroEstimado)}
             </td>
-            {/* Células vazias para Lucro % e Ações */}
             <td colSpan="2"></td>
           </tr>
         </tfoot>
 
       </table>
 
-      {/* --- Modal (sem mudanças) --- */}
+      {/* --- Modal --- */}
       <Modal
         isOpen={modalIsOpen}
         onRequestClose={closeModal}
@@ -325,6 +331,33 @@ function StockItemList({ api, onDataChanged }) {
                 <input id="edit_preco_venda" name="preco_venda_estimado_brl" type="number" step="0.01" value={editFormData.preco_venda_estimado_brl} onChange={handleEditChange} required />
               </div>
               <div className="input-group">
+                <label htmlFor="edit_data_compra">Data da Compra</label>
+                <input
+                  id="edit_data_compra"
+                  name="data_compra"
+                  type="date"
+                  value={editFormData.data_compra}
+                  onChange={(e) => {
+                    handleEditChange(e);
+                    fetchRateForModal(e.target.value);
+                  }}
+                  required
+                />
+              </div>
+              <div className="input-group">
+                <label htmlFor="edit_dolar">Cotação Dólar (R$)</label>
+                <input
+                  id="edit_dolar"
+                  name="taxa_dolar"
+                  type="number"
+                  step="0.0001"
+                  value={editFormData.taxa_dolar}
+                  onChange={handleEditChange}
+                  placeholder={loadingRate ? "Buscando..." : ""}
+                  required
+                />
+              </div>
+              <div className="input-group">
                 <label htmlFor="edit_preco_compra">Preço Compra (USD)</label>
                 <input id="edit_preco_compra" name="preco_compra_usd" type="number" step="0.01" value={editFormData.preco_compra_usd} onChange={handleEditChange} required />
               </div>
@@ -337,20 +370,13 @@ function StockItemList({ api, onDataChanged }) {
                 <input id="edit_iof" name="iof_percent" type="number" step="0.01" value={editFormData.iof_percent} onChange={handleEditChange} required />
               </div>
               <div className="input-group">
-                <label htmlFor="edit_dolar">Cotação Dólar (R$)</label>
-                <input id="edit_dolar" name="taxa_dolar" type="number" step="0.01" value={editFormData.taxa_dolar} onChange={handleEditChange} required />
-              </div>
-              <div className="input-group">
                 <label htmlFor="edit_shipping">Método de Envio</label>
                 <select id="edit_shipping" name="shipping_method" value={editFormData.shipping_method} onChange={handleEditChange}>
                   <option value="Air">Aéreo ($22.50/kg)</option>
                   <option value="Sea">Marítimo ($12.00/kg)</option>
                 </select>
               </div>
-              {/* <div className="input-group">
-                <label htmlFor="edit_custo_adicional">Custo Adicional (R$)</label>
-                <input id="edit_custo_adicional" name="custo_adicional_brl" type="number" step="0.01" value={editFormData.custo_adicional_brl} onChange={handleEditChange} required />
-              </div> */}
+              {/* Custo adicional não é mais editável aqui */}
               <div className="modal-actions">
                 <button type="button" onClick={closeModal}>Cancelar</button>
                 <button type="submit">Salvar Alterações</button>

@@ -1,15 +1,13 @@
 # backend/app.py
+import requests  # 1. Novo import
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from database import db
 from sqlalchemy.sql import func
-# 1. Importar UTC
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta  # 2. Novo import
 from models import ProdutoCatalogo, ItemEstoque, Venda, Transacao, ContaAPagar, ContaAReceber, LoteDeCusto, \
     AlocacaoCustoItem
 from flask_migrate import Migrate
-import os
-from flask import send_from_directory
 
 app = Flask(__name__)
 CORS(app)
@@ -23,41 +21,40 @@ SHIPPING_RATES = {'Air': 22.5, 'Sea': 12.0}
 
 # --- Funções Auxiliares (sem mudanças) ---
 def recalcular_custos_e_lucro_item(item_id):
-    item = ItemEstoque.query.get(item_id)
+    # ... (igual)
+    item = ItemEstoque.query.get(item_id);
     if not item: return
-    custo_adicional_brl = item.get_custo_adicional_total()
-    custo_total_brl = item.custo_produto_brl + item.custo_iof_brl + item.custo_frete_brl + custo_adicional_brl
-    preco_venda_estimado_brl = item.produto_catalogo.preco_venda_estimado_brl
-    lucro_brl = preco_venda_estimado_brl - custo_total_brl
+    custo_adicional_brl = item.get_custo_adicional_total();
+    custo_total_brl = item.custo_produto_brl + item.custo_iof_brl + item.custo_frete_brl + custo_adicional_brl;
+    preco_venda_estimado_brl = item.produto_catalogo.preco_venda_estimado_brl;
+    lucro_brl = preco_venda_estimado_brl - custo_total_brl;
     lucro_percent = (lucro_brl / custo_total_brl) * 100 if custo_total_brl > 0 else 0
-    item.custo_total_brl = custo_total_brl
-    item.lucro_estimado_brl = lucro_brl
+    item.custo_total_brl = custo_total_brl;
+    item.lucro_estimado_brl = lucro_brl;
     item.lucro_estimado_percent = lucro_percent
     db.session.add(item)
 
 
 def recalcular_lote_e_itens(lote, item_ids):
+    # ... (igual)
     lote.alocacoes.delete()
-    if not item_ids:
-        db.session.commit()
-        return
+    if not item_ids: db.session.commit(); return
     itens = ItemEstoque.query.filter(ItemEstoque.id.in_(item_ids)).all()
-    if len(itens) != len(item_ids):
-        raise Exception('Alguns IDs de itens não foram encontrados.')
+    if len(itens) != len(item_ids): raise Exception('Alguns IDs de itens não foram encontrados.')
     total_base_rateio = 0.0
     for item in itens:
         if lote.metodo_rateio == 'Valor':
             total_base_rateio += item.custo_produto_brl
         else:
             total_base_rateio += item.peso_kg
-    if total_base_rateio == 0:
-        raise Exception('O total do peso/valor dos itens é zero. Não é possível dividir por zero.')
+    if total_base_rateio == 0: raise Exception(
+        'O total do peso/valor dos itens é zero. Não é possível dividir por zero.')
     for item in itens:
         base_do_item = item.custo_produto_brl if lote.metodo_rateio == 'Valor' else item.peso_kg
-        proporcao = base_do_item / total_base_rateio
+        proporcao = base_do_item / total_base_rateio;
         custo_alocado_para_o_item = lote.valor_total_brl * proporcao
         nova_alocacao = AlocacaoCustoItem(lote_id=lote.id, item_estoque_id=item.id,
-                                          valor_alocado_brl=custo_alocado_para_o_item)
+                                          valor_alocado_brl=custo_alocado_para_o_item);
         db.session.add(nova_alocacao)
     db.session.flush()
     for item in itens:
@@ -66,6 +63,7 @@ def recalcular_lote_e_itens(lote, item_ids):
 
 
 def calcular_custos_e_lucro(data, preco_venda_estimado_brl):
+    # ... (igual)
     preco_compra_usd = float(data.get('preco_compra_usd'));
     peso_kg = float(data.get('peso_kg'));
     iof_percent = float(data.get('iof_percent'));
@@ -84,14 +82,56 @@ def calcular_custos_e_lucro(data, preco_venda_estimado_brl):
             'lucro_estimado_brl': lucro_brl, 'lucro_estimado_percent': lucro_percent}
 
 
-# --- ROTAS DO CATÁLOGO ---
+# --- 3. NOVA ROTA DA API DO BANCO CENTRAL ---
+@app.route('/api/get-exchange-rate', methods=['GET'])
+def get_exchange_rate():
+    # Pega a data do parâmetro (ex: ?date=2025-10-30)
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({'erro': 'Parâmetro de data é obrigatório.'}), 400
+
+    try:
+        current_date = datetime.fromisoformat(date_str).date()
+    except ValueError:
+        return jsonify({'erro': 'Formato de data inválido. Use AAAA-MM-DD.'}), 400
+
+    # Loop "look-back" para encontrar o último dia útil (max 7 dias)
+    for i in range(7):
+        # Formata a data para o padrão do BCB (MM-DD-AAAA)
+        bcb_date_str = current_date.strftime('%m-%d-%Y')
+
+        # URL da API Olinda do BCB para cotação PTAX do dia
+        url = f"https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='{bcb_date_str}'&$top=1&$format=json"
+
+        try:
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()  # Lança erro se a chamada falhar
+            data = response.json()
+
+            # Se a lista 'value' não estiver vazia, encontramos
+            if data.get('value') and len(data['value']) > 0:
+                # Retorna a cotação de VENDA (a que você paga)
+                rate = data['value'][0]['cotacaoVenda']
+                return jsonify({'rate': rate, 'date_found': current_date.isoformat()})
+
+        except requests.RequestException as e:
+            # Se a API do BCB falhar, paramos
+            return jsonify({'erro': f'Falha ao contatar API do BCB: {str(e)}'}), 500
+
+        # Se não encontrou (lista vazia), tenta o dia anterior
+        current_date -= timedelta(days=1)
+
+    return jsonify({'erro': 'Não foi possível encontrar uma cotação válida nos últimos 7 dias.'}), 404
+
+
+# --- ROTAS DO CATÁLOGO (sem mudanças) ---
 @app.route('/catalogo', methods=['GET'])
 def listar_catalogo():
     produtos = ProdutoCatalogo.query.order_by(ProdutoCatalogo.nome).all();
     return jsonify([p.to_dict() for p in produtos])
 
 
-# --- ROTAS DO ESTOQUE ---
+# --- ROTAS DO ESTOQUE (ATUALIZADAS) ---
 @app.route('/estoque', methods=['GET'])
 def listar_estoque():
     itens = ItemEstoque.query.filter_by(status='Em Estoque').order_by(ItemEstoque.data_cadastro.desc()).all();
@@ -111,12 +151,19 @@ def adicionar_item_estoque():
                                       preco_venda_estimado_brl=float(data['preco_venda_estimado_brl']));
             db.session.add(produto);
             db.session.flush()
+
         data['custo_adicional_brl'] = 0.0
         calculos = calcular_custos_e_lucro(data, produto.preco_venda_estimado_brl)
+
+        # 4. (MUDANÇA) Passa a data_compra recebida do frontend
+        data_compra = datetime.fromisoformat(data.get('data_compra', datetime.now(UTC).isoformat()))
+
         novo_item = ItemEstoque(
-            produto_catalogo_id=produto.id, preco_compra_usd=float(data['preco_compra_usd']),
-            peso_kg=float(data['peso_kg']), iof_percent=float(data['iof_percent']),
-            taxa_dolar=float(data['taxa_dolar']), shipping_method=data.get('shipping_method', 'Air'),
+            produto_catalogo_id=produto.id,
+            data_compra=data_compra,  # <-- SALVA A DATA DA COMPRA
+            preco_compra_usd=float(data['preco_compra_usd']), peso_kg=float(data['peso_kg']),
+            iof_percent=float(data['iof_percent']), taxa_dolar=float(data['taxa_dolar']),
+            shipping_method=data.get('shipping_method', 'Air'),
             custo_produto_brl=calculos['custo_produto_brl'], custo_iof_brl=calculos['custo_iof_brl'],
             custo_frete_brl=calculos['custo_frete_brl'],
             custo_total_brl=calculos['custo_total_brl'],
@@ -137,6 +184,9 @@ def atualizar_item_estoque(id):
     try:
         if 'preco_venda_estimado_brl' in data:
             item.produto_catalogo.preco_venda_estimado_brl = float(data['preco_venda_estimado_brl'])
+
+        # 5. (MUDANÇA) Atualiza a data_compra
+        item.data_compra = datetime.fromisoformat(data.get('data_compra', item.data_compra.isoformat()))
 
         item.preco_compra_usd = float(data.get('preco_compra_usd', item.preco_compra_usd));
         item.peso_kg = float(data.get('peso_kg', item.peso_kg));
@@ -160,6 +210,7 @@ def atualizar_item_estoque(id):
 
 @app.route('/estoque/<int:id>', methods=['DELETE'])
 def deletar_item_estoque(id):
+    # ... (igual)
     item = ItemEstoque.query.get_or_404(id)
     try:
         db.session.delete(item);
@@ -172,13 +223,13 @@ def deletar_item_estoque(id):
 
 @app.route('/estoque/<int:id>/vender', methods=['POST'])
 def vender_item(id):
+    # 6. CORREÇÃO: datetime.now(UTC)
     item = ItemEstoque.query.get_or_404(id);
     data = request.json
     if item.status == 'Vendido': return jsonify({'erro': 'Este item já foi vendido.'}), 400
     try:
         preco_venda_final = float(data['preco_venda_final_brl']);
         metodo_pagamento = data.get('metodo_pagamento', 'AVista')
-        # 2. CORREÇÃO: datetime.utcnow() -> datetime.now(UTC)
         data_venda = datetime.fromisoformat(data.get('data_venda', datetime.now(UTC).isoformat()))
         item.status = 'Vendido';
         lucro_real = preco_venda_final - item.custo_total_brl
@@ -194,11 +245,14 @@ def vender_item(id):
         elif metodo_pagamento == 'Parcelado':
             parcelas = data.get('parcelas', []);
             if not parcelas: raise Exception("Venda parcelada não contém parcelas.")
-            for p in parcelas:
+            for i, p in enumerate(parcelas):
+                # 7. CORREÇÃO: timedelta(days=...)
+                vencimento_parcela = datetime.fromisoformat(
+                    p.get('data', (datetime.now(UTC) + timedelta(days=30 * (i + 1))).isoformat()))
                 conta = ContaAReceber(venda_id=nova_venda.id,
-                                      descricao=p.get('descricao', f"Parcela Venda {nova_venda.id}"),
-                                      valor_parcela_brl=float(p['valor']),
-                                      data_vencimento=datetime.fromisoformat(p['data']), status='Pendente')
+                                      descricao=p.get('descricao', f"Parcela {i + 1}/{len(parcelas)}"),
+                                      valor_parcela_brl=float(p['valor']), data_vencimento=vencimento_parcela,
+                                      status='Pendente')
                 db.session.add(conta)
         db.session.commit();
         return jsonify(nova_venda.to_dict()), 201
@@ -207,6 +261,7 @@ def vender_item(id):
         return jsonify({'erro': str(e)}), 400
 
 
+# --- ROTAS DE VENDAS (sem mudanças) ---
 @app.route('/vendas', methods=['GET'])
 def listar_vendas():
     vendas = Venda.query.order_by(Venda.data_venda.desc()).all();
@@ -216,6 +271,7 @@ def listar_vendas():
 # --- ROTAS FINANCEIRAS ---
 @app.route('/financeiro/balanco', methods=['GET'])
 def get_balanco_financeiro():
+    # ... (igual)
     try:
         total_receitas = db.session.query(func.sum(Transacao.valor_brl)).filter(
             Transacao.tipo == 'Receita').scalar() or 0.0;
@@ -240,12 +296,12 @@ def get_balanco_financeiro():
 
 @app.route('/financeiro/transacao-manual', methods=['POST'])
 def adicionar_transacao_manual():
+    # 8. CORREÇÃO: datetime.now(UTC)
     data = request.json
     try:
         tipo = data['tipo'];
         if tipo not in ['Receita', 'Custo']: return jsonify({'erro': "Tipo deve ser 'Receita' ou 'Custo'"}), 400
         data_transacao = datetime.fromisoformat(data['data'])
-        # 3. CORREÇÃO: datetime.utcnow() -> datetime.now(UTC)
         if data_transacao.date() > datetime.now(UTC).date():
             return jsonify({
                                'erro': "Esta data é futura. Use 'Registrar Custo Futuro' ou 'Registrar Recebimento Futuro' para agendamentos."}), 400
@@ -339,7 +395,7 @@ def pagar_conta(id):
 @app.route('/contas-a-pagar/<int:id>', methods=['PUT'])
 def atualizar_conta_a_pagar(id):
     conta = ContaAPagar.query.get_or_404(id)
-    if conta.status == 'Pago': return jsonify({'erro': 'Não é possível editar uma conta que já foi paga.'}), 400
+    if conta.status == 'Pago': return jsonify({'erro': 'Não é permitido editar uma conta que já foi paga.'}), 400
     data = request.json
     try:
         conta.descricao = data.get('descricao', conta.descricao);
@@ -457,6 +513,7 @@ def deletar_conta_a_receber(id):
 # --- ROTA DE ESTIMATIVA ---
 @app.route('/estimativa/calcular', methods=['POST'])
 def calcular_estimativa():
+    # ... (igual)
     data = request.json
     try:
         preco_compra_usd = float(data['preco_compra_usd']);
@@ -505,7 +562,7 @@ def criar_lote_de_custo():
         nova_conta = ContaAPagar(
             descricao=f"Custo Logístico: {data['descricao']}",
             valor_brl=float(data['valor_total_brl']),
-            # 4. CORREÇÃO: datetime.utcnow() -> datetime.now(UTC)
+            # 9. CORREÇÃO: datetime.utcnow() -> datetime.now(UTC)
             data_vencimento=datetime.now(UTC)
         );
         db.session.add(nova_conta);
@@ -563,38 +620,6 @@ def deletar_lote_de_custo(id):
         return jsonify({'message': 'Lote de custo e conta a pagar associada foram removidos.'})
     except Exception as e:
         db.session.rollback();
-        return jsonify({'erro': str(e)}), 400
-
-@app.route('/admin/download-db', methods=['GET'])
-def download_database():
-    try:
-        # app.instance_path aponta para a pasta 'instance/'
-        return send_from_directory(app.instance_path, 'produtos.db', as_attachment=True)
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
-
-@app.route('/admin/upload-db', methods=['POST'])
-def upload_database():
-    if 'file' not in request.files:
-        return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
-
-    file = request.files['file']
-
-    if file.filename == '':
-        return jsonify({'erro': 'Nome de arquivo vazio.'}), 400
-
-    # Salva o arquivo com um nome temporário e seguro
-    save_path = os.path.join(app.instance_path, 'produtos_UPLOAD.db')
-
-    try:
-        file.save(save_path)
-        # AVISO IMPORTANTE para o usuário
-        return jsonify({
-            'message': 'Backup recebido com sucesso! '
-                       'AVISO: Para restaurar, você DEVE parar o servidor Flask, '
-                       'deletar o arquivo \'produtos.db\' e renomear \'produtos_UPLOAD.db\' para \'produtos.db\'.'
-        }), 200
-    except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
 
