@@ -1,6 +1,7 @@
 # backend/app.py
 import requests  # 1. Novo import
-from flask import Flask, request, jsonify
+import os
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from database import db
 from sqlalchemy.sql import func
@@ -621,6 +622,33 @@ def deletar_lote_de_custo(id):
     except Exception as e:
         db.session.rollback();
         return jsonify({'erro': str(e)}), 500
+
+@app.route('/admin/download-db', methods=['GET'])
+def download_database():
+    try:
+        # 1. Pega o nome do arquivo (ex: 'produtos.db')
+        db_filename = app.config['SQLALCHEMY_DATABASE_URI'].split('///')[-1]
+
+        # 2. Pega o caminho absoluto para a pasta 'instance'
+        # (ex: 'C:/.../backend/instance')
+        instance_folder_path = app.instance_path
+
+        # 3. Monta o caminho completo para o arquivo
+        # (ex: 'C:/.../backend/instance/produtos.db')
+        full_db_path = os.path.join(instance_folder_path, db_filename)
+
+        # Gera um nome de arquivo com a data atual
+        backup_name = f'backup_{datetime.now().strftime("%Y-%m-%d_%H%M")}.db'
+
+        return send_file(
+            full_db_path,         # <-- CORRETO: Usa o caminho completo
+            as_attachment=True,
+            download_name=backup_name
+        )
+    except FileNotFoundError:
+        return jsonify({'erro': f'Arquivo do banco de dados em "{full_db_path}" não encontrado.'}), 404
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao fazer download: {str(e)}'}), 500
 
 
 # --- Ponto de Partida ---
