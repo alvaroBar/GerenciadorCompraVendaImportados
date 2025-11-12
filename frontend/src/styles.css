@@ -521,3 +521,35 @@ th {
 .backup-manager .btn-download:hover {
   background: #0056b3;
 }
+
+.sales-history table .action-buttons {
+  text-align: center;
+  min-width: 140px; /* Garante espaço para os dois botões */
+}
+
+/* 2. Estiliza os botões DENTRO do histórico de vendas */
+.sales-history .btn-editar,
+.sales-history .btn-reverter {
+  font-size: 0.8em;
+  padding: 4px 8px;
+  margin-right: 5px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  color: white;
+}
+
+/* 3. Cores específicas */
+.sales-history .btn-editar {
+  background-color: #007bff; /* Azul (padrão) */
+}
+.sales-history .btn-editar:hover {
+  background-color: #0056b3;
+}
+
+.sales-history .btn-reverter {
+  background-color: #6c757d; /* Cinza */
+}
+.sales-history .btn-reverter:hover {
+  background-color: #5a6268;
+}

@@ -1,25 +1,35 @@
 // frontend/src/components/StockItemList.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, Fragment } from "react";
 import Modal from 'react-modal';
-import { Fragment } from 'react';
 
+// --- Constantes e Utilitários ---
 const SHIPPING_RATES = { 'Air': 22.5, 'Sea': 12.0 };
 const getTodayDate = () => new Date().toISOString().split('T')[0];
+const formatBRL = (value) => `R$ ${value.toFixed(2)}`;
 
+// --- Componente Principal ---
 function StockItemList({ api, onDataChanged }) {
+  // --- Estados do Componente ---
   const [stockItems, setStockItems] = useState([]);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [modalMode, setModalMode] = useState('edit');
   const [currentItem, setCurrentItem] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [openRowId, setOpenRowId] = useState(null);
-  const [vendaForm, setVendaForm] = useState({ data_venda: getTodayDate(), preco_venda_final_brl: "", metodo_pagamento: "AVista" });
+  const [vendaForm, setVendaForm] = useState({
+    data_venda: getTodayDate(),
+    preco_venda_final_brl: "",
+    metodo_pagamento: "AVista",
+    data_recebimento_prevista: ""
+  });
   const [parcelas, setParcelas] = useState([]);
   const [parcelaForm, setParcelaForm] = useState({ descricao: "", valor: "", data: "" });
   const [loadingRate, setLoadingRate] = useState(false);
 
-  // --- Funções (Corrigidas e sem duplicatas) ---
+  // Estado para controlar a ordenação (key: coluna, direction: 'ascending' ou 'descending')
+  const [sortConfig, setSortConfig] = useState({ key: 'lucro_estimado_brl', direction: 'descending' });
 
+  // --- Carregamento de Dados ---
   const loadItems = async () => {
     try {
       const response = await api.get("/estoque");
@@ -33,19 +43,92 @@ function StockItemList({ api, onDataChanged }) {
     loadItems();
   }, []); // Roda na montagem
 
+  // --- Lógica de Ordenação (useMemo) ---
+  const sortedItems = useMemo(() => {
+    let sortableItems = [...stockItems]; // Cria uma cópia
+
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+
+        let comparison = 0;
+
+        // Lógica de Sorter Aprimorada para Múltiplos Tipos
+        if (sortConfig.key === 'nome_produto') {
+          // Ordenação de String (A-Z)
+          valA = valA || ''; // Trata nulos
+          valB = valB || ''; // Trata nulos
+          comparison = valA.localeCompare(valB, 'pt-BR', { sensitivity: 'base' });
+
+        } else if (sortConfig.key === 'data_compra') {
+          // Ordenação de Data (ISO String)
+          valA = valA || '';
+          valB = valB || '';
+          if (valA < valB) comparison = -1;
+          if (valA > valB) comparison = 1;
+
+        } else {
+          // Ordenação Numérica (para todas as outras colunas)
+          valA = parseFloat(valA) || 0;
+          valB = parseFloat(valB) || 0;
+          if (valA < valB) comparison = -1;
+          if (valA > valB) comparison = 1;
+        }
+
+        // Aplica a direção (Ascendente ou Descendente)
+        return sortConfig.direction === 'ascending' ? comparison : (comparison * -1);
+      });
+    }
+    return sortableItems;
+  }, [stockItems, sortConfig]); // Dependências
+
+  // --- Funções de Manipulação (Handlers) ---
+
+  // Define a coluna e direção da ordenação ao clicar no cabeçalho
+  const requestSort = (key) => {
+    let direction = 'ascending'; // Default
+
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending'; // Inverte se já for ascendente
+    } else if (sortConfig.key === key && sortConfig.direction === 'descending') {
+      direction = 'ascending'; // Inverte se já for descendente
+    }
+    // Se for uma coluna nova
+    else if (sortConfig.key !== key) {
+      // Colunas de texto/data começam A-Z (Ascendente)
+      if (key === 'nome_produto' || key === 'data_compra') {
+        direction = 'ascending';
+      } else {
+        // Colunas de números (dinheiro, %) começam Maior-Menor (Descendente)
+        direction = 'descending';
+      }
+    }
+
+    setSortConfig({ key, direction });
+  };
+
+  // Retorna o ícone (▲/▼) para a coluna que está sendo ordenada
+  const getSortIndicator = (name) => {
+    if (sortConfig.key === name) {
+      return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
+    }
+    return null;
+  };
+
+  // Abre o modal (Editar, Vender, Excluir)
   const openModal = (mode, item) => {
     setCurrentItem(item);
     setModalMode(mode);
     if (mode === 'edit') {
       setEditFormData({
         preco_venda_estimado_brl: item.preco_venda_estimado_brl,
-        data_compra: item.data_compra, // Data da compra
+        data_compra: item.data_compra,
         preco_compra_usd: item.preco_compra_usd,
         peso_kg: item.peso_kg,
         iof_percent: item.iof_percent,
         taxa_dolar: item.taxa_dolar,
         shipping_method: item.shipping_method,
-        // Custo adicional não é editável aqui
       });
     }
     if (mode === 'sell') {
@@ -53,6 +136,7 @@ function StockItemList({ api, onDataChanged }) {
         data_venda: getTodayDate(),
         preco_venda_final_brl: item.preco_venda_estimado_brl.toFixed(2),
         metodo_pagamento: "AVista",
+        data_recebimento_prevista: ""
       });
       setParcelas([]);
       setParcelaForm({ descricao: "Parcela 1", valor: "", data: "" });
@@ -60,50 +144,62 @@ function StockItemList({ api, onDataChanged }) {
     setModalIsOpen(true);
   };
 
+  // Fecha o modal e reseta os formulários
   const closeModal = () => {
     setModalIsOpen(false);
     setCurrentItem(null);
     setEditFormData({});
-    setVendaForm({data_venda: getTodayDate(), preco_venda_final_brl: "", metodo_pagamento: "AVista"});
+    setVendaForm({
+      data_venda: getTodayDate(),
+      preco_venda_final_brl: "",
+      metodo_pagamento: "AVista",
+      data_recebimento_prevista: ""
+    });
     setParcelas([]);
     setParcelaForm({ descricao: "", valor: "", data: "" });
     setLoadingRate(false);
   };
 
+  // Atualiza o formulário de edição
   const handleEditChange = (e) => {
     setEditFormData({ ...editFormData, [e.target.name]: e.target.value });
   };
 
+  // Envia o formulário de edição
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!currentItem) return;
     try {
       await api.put(`/estoque/${currentItem.id}`, editFormData);
       closeModal();
-      onDataChanged();
+      onDataChanged(); // Atualiza dados na interface principal
     } catch (error) {
       alert("Erro ao atualizar item.");
     }
   };
 
+  // Deleta um item
   const handleDelete = async (id) => {
      if (!window.confirm("Tem certeza que deseja excluir este item?")) return;
     try {
       await api.delete(`/estoque/${id}`);
-      onDataChanged();
+      onDataChanged(); // Atualiza dados na interface principal
     } catch (error) {
       alert("Erro ao deletar item.");
     }
   };
 
+  // Atualiza o formulário de venda
   const handleVendaFormChange = (e) => {
     setVendaForm({ ...vendaForm, [e.target.name]: e.target.value });
   };
 
+  // Atualiza o formulário de parcela
   const handleParcelaFormChange = (e) => {
     setParcelaForm({ ...parcelaForm, [e.target.name]: e.target.value });
   };
 
+  // Adiciona uma nova parcela na lista
   const handleAddParcela = (e) => {
     e.preventDefault();
     if (!parcelaForm.valor || !parcelaForm.data) {
@@ -118,18 +214,20 @@ function StockItemList({ api, onDataChanged }) {
     });
   };
 
+  // Remove uma parcela da lista
   const removeParcela = (id) => {
     setParcelas(parcelas.filter(p => p.id !== id));
   };
 
+  // Envia o formulário de venda
   const handleSellSubmit = async (e) => {
     e.preventDefault();
     if (!currentItem) return;
 
     const dataToSend = {
-      ...vendaForm,
+      data_venda: vendaForm.data_venda,
       preco_venda_final_brl: parseFloat(vendaForm.preco_venda_final_brl),
-      parcelas: parcelas
+      metodo_pagamento: vendaForm.metodo_pagamento,
     };
 
     if (dataToSend.metodo_pagamento === 'Parcelado') {
@@ -142,32 +240,42 @@ function StockItemList({ api, onDataChanged }) {
         alert(`O total das parcelas (R$ ${totalParcelado.toFixed(2)}) não bate com o Preço de Venda Final (R$ ${dataToSend.preco_venda_final_brl.toFixed(2)}).`);
         return;
       }
+      dataToSend.parcelas = parcelas;
+    }
+    else if (dataToSend.metodo_pagamento === 'Marketplace') {
+      if (!vendaForm.data_recebimento_prevista) {
+        alert("Para venda via Marketplace, a 'Data Prevista de Recebimento' é obrigatória.");
+        return;
+      }
+      dataToSend.data_recebimento_prevista = new Date(vendaForm.data_recebimento_prevista + 'T00:00:00').toISOString();
     }
 
     try {
       await api.post(`/estoque/${currentItem.id}/vender`, dataToSend);
       closeModal();
-      onDataChanged();
+      onDataChanged(); // Atualiza dados na interface principal
     } catch (error) {
       const errorMsg = error.response?.data?.erro || "Erro ao registrar venda.";
       alert(errorMsg);
     }
   };
 
+  // Formata data ISO (corrigindo fuso)
   const formatarData = (isoString) => {
     if (!isoString) return 'N/A';
     const date = new Date(isoString);
-    // Corrige fuso horário para exibição de datas AAAA-MM-DD
-    if(isoString.length === 10) {
-        date.setDate(date.getDate() + 1);
+    if(isoString.length === 10) { // Se for AAAA-MM-DD
+        date.setDate(date.getDate() + 1); // Corrige bug de fuso horário
     }
     return date.toLocaleDateString('pt-BR');
   };
 
+  // Expande/contrai a linha de detalhes
   const handleRowClick = (itemId) => {
     setOpenRowId(prevId => (prevId === itemId ? null : itemId));
   };
 
+  // Calcula valores de detalhe (helper)
   const calcularValores = (p) => {
     return {
       custoProdutoBRL: p.custo_produto_brl,
@@ -182,7 +290,7 @@ function StockItemList({ api, onDataChanged }) {
     };
   };
 
-  // Função para buscar cotação DENTRO do modal
+  // Busca cotação do dólar no modal de edição
   const fetchRateForModal = async (date) => {
     if (!date) return;
     try {
@@ -197,36 +305,44 @@ function StockItemList({ api, onDataChanged }) {
     }
   };
 
-  const formatBRL = (value) => `R$ ${value.toFixed(2)}`;
+  // --- Cálculos de Total (Rodapé) ---
+  const totalCusto = stockItems.reduce((acc, item) => acc + (item.custo_total_brl || 0), 0);
+  const totalVendaEstimada = stockItems.reduce((acc, item) => acc + (item.preco_venda_estimado_brl || 0), 0);
+  const totalLucroEstimado = stockItems.reduce((acc, item) => acc + (item.lucro_estimado_brl || 0), 0);
 
-  const totalCusto = stockItems.reduce(
-    (acc, item) => acc + (item.custo_total_brl || 0), 0
-  );
-  const totalVendaEstimada = stockItems.reduce(
-    (acc, item) => acc + (item.preco_venda_estimado_brl || 0), 0
-  );
-  const totalLucroEstimado = stockItems.reduce(
-    (acc, item) => acc + (item.lucro_estimado_brl || 0), 0
-  );
-
-  // --- Renderização ---
+  // --- Renderização (JSX) ---
   return (
     <div>
       <h2>Itens em Estoque</h2>
       <table>
+        {/* Cabeçalho da Tabela (com onClick para Ordenação) */}
         <thead>
           <tr>
-            <th>Nome</th>
-            <th>Data Compra</th>
-            <th>Custo Total (BRL)</th>
-            <th>Venda Estimada (BRL)</th>
-            <th>Lucro Estimado (BRL)</th>
-            <th>Lucro (%)</th>
+            <th onClick={() => requestSort('nome_produto')}>
+              Nome {getSortIndicator('nome_produto')}
+            </th>
+            <th onClick={() => requestSort('data_compra')}>
+              Data Compra {getSortIndicator('data_compra')}
+            </th>
+            <th onClick={() => requestSort('custo_total_brl')}>
+              Custo Total (BRL) {getSortIndicator('custo_total_brl')}
+            </th>
+            <th onClick={() => requestSort('preco_venda_estimado_brl')}>
+              Venda Estimada (BRL) {getSortIndicator('preco_venda_estimado_brl')}
+            </th>
+            <th onClick={() => requestSort('lucro_estimado_brl')}>
+              Lucro Estimado (BRL) {getSortIndicator('lucro_estimado_brl')}
+            </th>
+            <th onClick={() => requestSort('lucro_estimado_percent')}>
+              Lucro (%) {getSortIndicator('lucro_estimado_percent')}
+            </th>
             <th>Ações</th>
           </tr>
         </thead>
+
+        {/* Corpo da Tabela (Renderiza a partir de 'sortedItems') */}
         <tbody>
-          {stockItems.map((item) => {
+          {sortedItems.map((item) => { // <-- USA O ARRAY ORDENADO
             const isRowOpen = openRowId === item.id;
             return (
               <Fragment key={item.id}>
@@ -248,6 +364,7 @@ function StockItemList({ api, onDataChanged }) {
                   </td>
                 </tr>
 
+                {/* Linha de Detalhes (Expandida) */}
                 {isRowOpen && (
                   <tr className="breakdown-row">
                     <td colSpan="7">
@@ -291,6 +408,7 @@ function StockItemList({ api, onDataChanged }) {
           })}
         </tbody>
 
+        {/* Rodapé da Tabela (Totais) */}
         <tfoot>
           <tr style={{borderTop: '2px solid #333'}}>
             <td colSpan="2" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
@@ -308,10 +426,9 @@ function StockItemList({ api, onDataChanged }) {
             <td colSpan="2"></td>
           </tr>
         </tfoot>
-
       </table>
 
-      {/* --- Modal --- */}
+      {/* --- Seção do Modal --- */}
       <Modal
         isOpen={modalIsOpen}
         onRequestClose={closeModal}
@@ -376,7 +493,6 @@ function StockItemList({ api, onDataChanged }) {
                   <option value="Sea">Marítimo ($12.00/kg)</option>
                 </select>
               </div>
-              {/* Custo adicional não é mais editável aqui */}
               <div className="modal-actions">
                 <button type="button" onClick={closeModal}>Cancelar</button>
                 <button type="submit">Salvar Alterações</button>
@@ -385,7 +501,7 @@ function StockItemList({ api, onDataChanged }) {
           </div>
         )}
 
-        {/* Modal de Venda */}
+        {/* Modal de Venda (com Marketplace) */}
         {modalMode === 'sell' && currentItem && (
           <div>
             <h2>Registrar Venda do Item</h2>
@@ -405,10 +521,26 @@ function StockItemList({ api, onDataChanged }) {
                 <label htmlFor="payment_method">Método de Pagamento</label>
                 <select id="payment_method" name="metodo_pagamento" value={vendaForm.metodo_pagamento} onChange={handleVendaFormChange}>
                   <option value="AVista">À Vista (Entra no Caixa)</option>
+                  <option value="Marketplace">Marketplace (ML, Shopee, etc)</option>
                   <option value="Parcelado">Parcelado (Gera Contas a Receber)</option>
                 </select>
               </div>
 
+              {/* Campo Condicional para Marketplace */}
+              {vendaForm.metodo_pagamento === 'Marketplace' && (
+                <div className="input-group">
+                  <label htmlFor="data_recebimento_prevista">Data Prevista de Recebimento</label>
+                  <input
+                    id="data_recebimento_prevista"
+                    name="data_recebimento_prevista"
+                    type="date"
+                    value={vendaForm.data_recebimento_prevista}
+                    onChange={handleVendaFormChange}
+                  />
+                </div>
+              )}
+
+              {/* Campo Condicional para Parcelado */}
               {vendaForm.metodo_pagamento === 'Parcelado' && (
                 <div className="parcelado-controls">
                   <strong>Definir Parcelas:</strong>

@@ -237,17 +237,18 @@ def vender_item(id):
         nova_venda = Venda(data_venda=data_venda, preco_venda_final_brl=preco_venda_final, lucro_real_brl=lucro_real,
                            item_id=item.id)
         db.session.add(nova_venda);
-        db.session.flush()
+        db.session.flush()  # Importante para termos o nova_venda.id
+
         if metodo_pagamento == 'AVista':
             transacao_receita = Transacao(data=data_venda, tipo='Receita',
                                           descricao=f"Venda à vista de {item.produto_catalogo.nome} (Venda ID: {nova_venda.id})",
                                           valor_brl=preco_venda_final, item_estoque_id=item.id, venda_id=nova_venda.id)
             db.session.add(transacao_receita)
+
         elif metodo_pagamento == 'Parcelado':
             parcelas = data.get('parcelas', []);
             if not parcelas: raise Exception("Venda parcelada não contém parcelas.")
             for i, p in enumerate(parcelas):
-                # 7. CORREÇÃO: timedelta(days=...)
                 vencimento_parcela = datetime.fromisoformat(
                     p.get('data', (datetime.now(UTC) + timedelta(days=30 * (i + 1))).isoformat()))
                 conta = ContaAReceber(venda_id=nova_venda.id,
@@ -255,6 +256,25 @@ def vender_item(id):
                                       valor_parcela_brl=float(p['valor']), data_vencimento=vencimento_parcela,
                                       status='Pendente')
                 db.session.add(conta)
+
+        # --- NOVO BLOCO ADICIONADO ---
+        elif metodo_pagamento == 'Marketplace':
+            data_recebimento_prevista_str = data.get('data_recebimento_prevista')
+            if not data_recebimento_prevista_str:
+                raise Exception("Data de recebimento prevista é obrigatória para vendas via Marketplace.")
+
+            data_recebimento_prevista = datetime.fromisoformat(data_recebimento_prevista_str)
+
+            conta_marketplace = ContaAReceber(
+                venda_id=nova_venda.id,
+                descricao=f"Recebimento Marketplace: {item.produto_catalogo.nome}",
+                valor_parcela_brl=preco_venda_final,  # O valor total da venda
+                data_vencimento=data_recebimento_prevista,  # A data que o usuário informou
+                status='Pendente'
+            )
+            db.session.add(conta_marketplace)
+        # --- FIM DO NOVO BLOCO ---
+
         db.session.commit();
         return jsonify(nova_venda.to_dict()), 201
     except Exception as e:
@@ -267,6 +287,79 @@ def vender_item(id):
 def listar_vendas():
     vendas = Venda.query.order_by(Venda.data_venda.desc()).all();
     return jsonify([v.to_dict() for v in vendas])
+
+@app.route('/venda/<int:id>/reverter', methods=['POST'])
+def reverter_venda(id):
+    venda = Venda.query.get_or_404(id)
+    item = ItemEstoque.query.get(venda.item_id)
+
+    # TRAVA DE SEGURANÇA:
+    # Verifica se existe alguma parcela paga para esta venda
+    contas_pagas = ContaAReceber.query.filter_by(venda_id=venda.id, status='Pago').count()
+    if contas_pagas > 0:
+        return jsonify({'erro': 'Não é possível reverter: esta venda tem parcelas que já foram recebidas.'}), 400
+
+    try:
+        # 1. Deleta Contas a Receber (do modo "Parcelado")
+        #    Isso é seguro, pois já checamos que não há parcelas 'Pagas'
+        ContaAReceber.query.filter_by(venda_id=venda.id).delete()
+
+        # 2. Deleta a Transação (do modo "AVista")
+        Transacao.query.filter_by(venda_id=venda.id).delete()
+
+        # 3. Restaura o Item ao estoque
+        if item:
+            item.status = 'Em Estoque'
+            db.session.add(item)
+
+        # 4. Deleta a Venda
+        db.session.delete(venda)
+
+        db.session.commit()
+        return jsonify({'message': 'Venda revertida com sucesso. O item retornou ao estoque.'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': f'Erro ao reverter venda: {str(e)}'}), 500
+
+
+@app.route('/venda/<int:id>', methods=['PUT'])
+def atualizar_venda(id):
+    venda = Venda.query.get_or_404(id)
+    item = ItemEstoque.query.get(venda.item_id)
+    data = request.json
+
+    if not item:
+        return jsonify({'erro': 'Item de estoque associado a esta venda não foi encontrado.'}), 404
+
+    # TRAVA DE SEGURANÇA:
+    contas_pagas = ContaAReceber.query.filter_by(venda_id=venda.id, status='Pago').count()
+    if contas_pagas > 0:
+        return jsonify({'erro': 'Não é possível editar: esta venda tem parcelas que já foram recebidas.'}), 400
+
+    try:
+        # 1. Atualiza os dados da Venda
+        venda.preco_venda_final_brl = float(data.get('preco_venda_final_brl', venda.preco_venda_final_brl))
+        venda.data_venda = datetime.fromisoformat(data.get('data_venda', venda.data_venda.isoformat()))
+
+        # 2. Recalcula o Lucro
+        venda.lucro_real_brl = venda.preco_venda_final_brl - item.custo_total_brl
+        db.session.add(venda)
+
+        # 3. Atualiza a Transação "AVista" (se existir)
+        #    (Não mexe nas "Parcelado", pois a trava de segurança já barrou)
+        transacao_avista = Transacao.query.filter_by(venda_id=venda.id).first()
+        if transacao_avista:
+            transacao_avista.valor_brl = venda.preco_venda_final_brl
+            transacao_avista.data = venda.data_venda
+            db.session.add(transacao_avista)
+
+        db.session.commit()
+        return jsonify(venda.to_dict())
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': f'Erro ao atualizar venda: {str(e)}'}), 500
 
 
 # --- ROTAS FINANCEIRAS ---
