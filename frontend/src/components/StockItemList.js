@@ -310,6 +310,12 @@ function StockItemList({ api, onDataChanged }) {
   const totalVendaEstimada = stockItems.reduce((acc, item) => acc + (item.preco_venda_estimado_brl || 0), 0);
   const totalLucroEstimado = stockItems.reduce((acc, item) => acc + (item.lucro_estimado_brl || 0), 0);
 
+  // --- NOVO CÁLCULO: Média de Lucro % ---
+  const totalLucroPercent = stockItems.reduce((acc, item) => acc + (item.lucro_estimado_percent || 0), 0);
+  const mediaLucroPercent = stockItems.length > 0 ? totalLucroPercent / stockItems.length : 0;
+  // --- FIM DO NOVO CÁLCULO ---
+
+
   // --- Renderização (JSX) ---
   return (
     <div>
@@ -408,11 +414,14 @@ function StockItemList({ api, onDataChanged }) {
           })}
         </tbody>
 
-        {/* Rodapé da Tabela (Totais) */}
+        {/* --- MUDANÇA NO RODAPÉ (<tfoot>) --- */}
         <tfoot>
           <tr style={{borderTop: '2px solid #333'}}>
-            <td colSpan="2" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
+            <td colSpan="1" style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '1.1em' }}>
               Totais do Estoque:
+            </td>
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em', textAlign: 'center' }}>
+              {sortedItems.length} Itens
             </td>
             <td style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
               {formatBRL(totalCusto)}
@@ -423,9 +432,17 @@ function StockItemList({ api, onDataChanged }) {
             <td style={{ fontWeight: 'bold', fontSize: '1.1em', color: totalLucroEstimado < 0 ? 'red' : 'green' }}>
               {formatBRL(totalLucroEstimado)}
             </td>
-            <td colSpan="2"></td>
+
+            {/* Célula Adicionada para Média de Lucro % */}
+            <td style={{ fontWeight: 'bold', fontSize: '1.1em', color: mediaLucroPercent < 0 ? 'red' : 'green' }}>
+              {mediaLucroPercent.toFixed(2)}%
+            </td>
+            {/* Fim da Adição */}
+
+            <td colSpan="1"></td> {/* Cobre apenas a coluna 'Ações' agora */}
           </tr>
         </tfoot>
+        {/* --- FIM DA MUDANÇA --- */}
       </table>
 
       {/* --- Seção do Modal --- */}

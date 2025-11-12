@@ -1,17 +1,14 @@
 // frontend/src/components/SalesHistory.js
 import React, { useEffect, useState } from "react";
-// --- NOVO ---
-// Vamos precisar deste modal, que criaremos a seguir
+// Importa o modal que já criamos
 import EditarVendaModal from "./EditarVendaModal";
 
 function SalesHistory({ api }) {
   const [vendas, setVendas] = useState([]);
 
-  // --- NOVO ---
   // Estado para controlar qual venda estamos editando
   const [vendaParaEditar, setVendaParaEditar] = useState(null);
 
-  // --- MUDANÇA ---
   // Extraímos a lógica de carregamento para uma função
   // assim podemos "recarregar" a lista após uma ação.
   const fetchVendas = async () => {
@@ -29,10 +26,11 @@ function SalesHistory({ api }) {
 
   const formatarData = (isoString) => {
     if (!isoString) return 'N/A';
+    // --- MUDANÇA --- (Usando toLocaleString que você tinha antes)
     return new Date(isoString).toLocaleString('pt-BR');
   };
 
-  // --- NOVA FUNÇÃO: REVERTER ---
+  // --- FUNÇÃO: REVERTER ---
   const handleReverter = async (vendaId) => {
     if (!window.confirm("Tem certeza que deseja reverter esta venda? O item voltará ao estoque.")) {
       return;
@@ -41,13 +39,14 @@ function SalesHistory({ api }) {
       await api.post(`/venda/${vendaId}/reverter`);
       alert('Venda revertida com sucesso!');
       fetchVendas(); // Recarrega a lista de vendas
-      // Você também precisará recarregar a lista de ESTOQUE em outro lugar
+      // NOTA: Você precisará de um 'onDataChanged' (como no StockItemList)
+      // para forçar a atualização da lista de estoque.
     } catch (error) {
       alert('Erro ao reverter venda: ' + (error.response?.data?.erro || error.message));
     }
   };
 
-  // --- NOVAS FUNÇÕES: EDITAR (Modal) ---
+  // --- FUNÇÕES: EDITAR (Modal) ---
   const handleAbrirModalEditar = (venda) => {
     setVendaParaEditar(venda);
   };
@@ -78,40 +77,59 @@ function SalesHistory({ api }) {
             <th>Custo (BRL)</th>
             <th>Venda (BRL)</th>
             <th>Lucro Real (BRL)</th>
-            <th>Ações</th> {/* <-- Nova Coluna */}
+            {/* --- NOVO: Cabeçalho da coluna --- */}
+            <th>Lucro (%)</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody>
-          {vendas.map((venda) => (
-            <tr key={venda.id_venda}>
-              <td>{venda.nome_produto} (ID: {venda.item_id})</td>
-              <td>{formatarData(venda.data_venda)}</td>
-              <td>R$ {venda.custo_total_brl.toFixed(2)}</td>
-              <td>R$ {venda.preco_venda_final_brl.toFixed(2)}</td>
-              <td style={{ color: venda.lucro_real_brl < 0 ? 'red' : 'green' }}>
-                R$ {venda.lucro_real_brl.toFixed(2)}
-              </td>
-              {/* <-- Novos Botões --> */}
-              <td>
-                <button
-                  className="btn-editar" // Adicione classes CSS se quiser
-                  onClick={() => handleAbrirModalEditar(venda)}
-                >
-                  Editar
-                </button>
-                <button
-                  className="btn-reverter" // Adicione classes CSS se quiser
-                  onClick={() => handleReverter(venda.id_venda)}
-                >
-                  Reverter
-                </button>
-              </td>
-            </tr>
-          ))}
+          {vendas.map((venda) => {
+
+            // --- NOVO: Lógica de cálculo movida para cá ---
+            const custo = parseFloat(venda.custo_total_brl);
+            const lucro = parseFloat(venda.lucro_real_brl);
+            // Evita divisão por zero
+            const lucroPercent = (custo > 0) ? (lucro / custo) * 100 : 0;
+            const corLucro = lucro < 0 ? 'red' : 'green';
+            // --- FIM DA LÓGICA ---
+
+            return (
+              <tr key={venda.id_venda}>
+                <td>{venda.nome_produto} (ID: {venda.item_id})</td>
+                <td>{formatarData(venda.data_venda)}</td>
+                {/* --- MUDANÇA: Usando as variáveis calculadas --- */}
+                <td>R$ {custo.toFixed(2)}</td>
+                <td>R$ {venda.preco_venda_final_brl.toFixed(2)}</td>
+                <td style={{ color: corLucro }}>
+                  R$ {lucro.toFixed(2)}
+                </td>
+
+                {/* --- NOVO: Célula da porcentagem --- */}
+                <td style={{ color: corLucro }}>
+                  {lucroPercent.toFixed(2)}%
+                </td>
+
+                <td className="action-buttons">
+                  <button
+                    className="btn-editar"
+                    onClick={() => handleAbrirModalEditar(venda)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="btn-reverter"
+                    onClick={() => handleReverter(venda.id_venda)}
+                  >
+                    Reverter
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
-      {/* --- NOVO: Renderização do Modal --- */}
+      {/* --- Renderização do Modal --- */}
       {vendaParaEditar && (
         <EditarVendaModal
           venda={vendaParaEditar}
